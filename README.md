@@ -9,8 +9,14 @@
 - **模型白名单**：只有 Coding Plan 包含的模型才计入配额
 - **管理后台**：可视化查看用量、管理 Key
 - **用户面板**：用户自助查看自己的配额使用情况
+- **安全特性**：
+  - Redis 密码不泄露到日志
+  - API Key 脱敏显示，按需获取完整密钥
+  - Pydantic 输入校验
 
 ## 支持的模型
+
+白名单内的模型计入配额，其他模型直接透传不计费：
 
 ```
 qwen3.5-plus
@@ -25,16 +31,16 @@ kimi-k2.5
 
 ## 部署步骤
 
-### 1. 把项目传到服务器
+### 1. 克隆项目到服务器
 
 ```bash
-scp -r bailian/ user@your-server:~/
+git clone https://github.com/Peters-Pans/dashscope-proxy.git
+cd dashscope-proxy
 ```
 
 ### 2. 一键部署
 
 ```bash
-cd ~/bailian
 bash setup.sh
 ```
 
@@ -67,7 +73,7 @@ certbot --nginx -d your-domain.com
 docker compose logs -f proxy    # 查看日志
 docker compose restart proxy    # 重启
 docker compose down             # 停止
-docker compose pull && docker compose up -d  # 更新
+docker compose build && docker compose up -d  # 重新构建并启动
 ```
 
 ## API 使用
@@ -81,12 +87,69 @@ curl https://your-domain.com/v1/chat/completions \
   -d '{"model": "qwen3.5-plus", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
-### 查看用量
+### 查看用量（用户端）
 
 ```bash
 curl https://your-domain.com/_usage \
   -H "Authorization: Bearer sk-sub-xxxxx"
 ```
+
+## 管理后台
+
+### 访问地址
+
+- 管理后台：`https://your-domain.com/_panel/admin`
+- 用户面板：`https://your-domain.com/_panel/usage`
+
+### 管理员 API
+
+需要携带 `X-Admin-Token` 头：
+
+```bash
+# 查看所有 Key 状态
+curl https://your-domain.com/_admin/keys \
+  -H "X-Admin-Token: your-admin-token"
+
+# 禁用/启用 Key
+curl -X POST https://your-domain.com/_admin/keys/k1/toggle \
+  -H "X-Admin-Token: your-admin-token"
+
+# 修改配额
+curl -X PUT https://your-domain.com/_admin/keys/k1/limits \
+  -H "X-Admin-Token: your-admin-token" \
+  -H "Content-Type: application/json" \
+  -d '{"month": 50000, "week": 20000, "5h": 3000}'
+
+# 修改用量
+curl -X PUT https://your-domain.com/_admin/keys/k1/usage \
+  -H "X-Admin-Token: your-admin-token" \
+  -H "Content-Type: application/json" \
+  -d '{"month": 1000, "week": 500, "5h": 100}'
+
+# 重新生成 Key
+curl -X POST https://your-domain.com/_admin/keys/k1/regenerate \
+  -H "X-Admin-Token: your-admin-token"
+
+# 获取完整 Secret
+curl https://your-domain.com/_admin/keys/k1/secret \
+  -H "X-Admin-Token: your-admin-token"
+```
+
+## 配额说明
+
+### 默认配额
+
+| 周期 | 默认值 | 重置时间 |
+|------|--------|----------|
+| 5小时 | 1,500 次 | 每 5 小时整点重置（00:00, 05:00, 10:00, 15:00, 20:00） |
+| 自然周 | 11,250 次 | 每周一 00:00 |
+| 自然月 | 22,500 次 | 每月 1 日 00:00 |
+
+### 配额校验规则
+
+- 任意周期达到上限都会拒绝请求（429）
+- 流式请求失败会自动回滚配额
+- 客户端主动断开不回滚（上游已处理）
 
 ## 项目结构
 
@@ -102,6 +165,13 @@ curl https://your-domain.com/_usage \
 ├── setup.sh             # 一键部署脚本
 └── requirements.txt
 ```
+
+## 更新日志
+
+### 2026-03-24
+- 🔒 Redis 密码不再泄露到日志
+- 🔒 API Key 脱敏显示，需单独接口获取完整密钥
+- ✅ 添加 Pydantic 输入校验
 
 ## License
 
