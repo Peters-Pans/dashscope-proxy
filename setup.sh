@@ -79,9 +79,8 @@ ENVEOF
 fi
 
 # ── 更新 docker-compose.yml 加 Redis 密码 ────
-REDIS_PASS=$(grep REDIS_URL .env | sed 's/.*:\/\/:([^@]*)@.*/\1/' | grep -oP '(?<=:)[^@]+(?=@)')
-# 简单做法：直接从 .env 提取
-REDIS_PASS_VAL=$(grep "^REDIS_URL=" .env | sed 's/.*:\/\/:[[:space:]]*\([^@]*\)@.*/\1/')
+# 直接用生成时的变量，不需要再从 .env 解析
+REDIS_PASS_VAL=$REDIS_PASS
 
 cat > docker-compose.yml << DCEOF
 services:
