@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>用量查询 — DashScope 代理</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f0f2ff;--card:#fff;--border:#e2e8f0;
+  --accent:#5b50e8;--al:rgba(91,80,232,.1);--a2:#8b5cf6;
+  --text:#1e1b4b;--t2:#64748b;--t3:#94a3b8;
+  --ok:#059669;--warn:#d97706;--crit:#dc2626;
+  --bar-bg:#e8eaf6;
+  --r:14px;--font:'Noto Sans SC',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
+
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;
+  background:linear-gradient(135deg,#ede9fe 0%,#f0f2ff 60%,#e0f2fe 100%)}
+.lc{background:var(--card);border:1px solid var(--border);border-radius:20px;
+  padding:44px 40px;width:380px;box-shadow:0 12px 40px rgba(91,80,232,.12)}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:24px}
+.bico{width:40px;height:40px;border-radius:11px;
+  background:linear-gradient(135deg,var(--accent),var(--a2));
+  display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px}
+.bname{font-size:18px;font-weight:700}.bname span{color:var(--accent)}
+.lc h2{font-size:20px;font-weight:600;margin-bottom:4px}
+.lc p{color:var(--t2);font-size:13px;margin-bottom:24px}
+.iw{position:relative;margin-bottom:14px}
+.iw input{width:100%;padding:12px 16px 12px 40px;border-radius:10px;border:1.5px solid var(--border);
+  background:#fafbff;color:var(--text);font-family:var(--mono);font-size:13px;
+  outline:none;transition:border-color .2s,box-shadow .2s}
+.iw input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,80,232,.1)}
+.iico{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--t3);font-size:14px}
+.btn-q{width:100%;padding:13px;border-radius:10px;
+  background:linear-gradient(135deg,var(--accent),var(--a2));
+  color:#fff;font-size:15px;font-weight:600;border:none;cursor:pointer;
+  box-shadow:0 4px 12px rgba(91,80,232,.3);transition:opacity .2s}
+.btn-q:hover{opacity:.92}
+.ierr{color:var(--crit);font-size:12px;margin-top:8px;display:none}
+
+#app{display:none}
+.pw{max-width:740px;margin:0 auto;padding:28px 20px 60px}
+
+/* ── 用户头部 ── */
+.uh{background:var(--card);border:1px solid var(--border);border-radius:var(--r);
+  padding:20px 24px;display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;box-shadow:0 2px 12px rgba(91,80,232,.06)}
+.uav{width:44px;height:44px;border-radius:12px;
+  background:linear-gradient(135deg,var(--accent),var(--a2));
+  display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px}
+.uname{font-size:16px;font-weight:700}
+.umeta{color:var(--t2);font-size:12px;margin-top:2px}
+.ustatus{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500}
+.dot{width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 6px #10b981;
+  animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+/* ── 刷新行 ── */
+.rrow{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.rtitle{font-size:16px;font-weight:700}
+.rinfo{display:flex;align-items:center;gap:10px}
+.rts{color:var(--t3);font-size:12px}
+.rbtn{width:32px;height:32px;border-radius:8px;background:var(--card);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  font-size:15px;transition:all .2s;color:var(--t2)}
+.rbtn:hover{border-color:var(--accent);color:var(--accent)}
+.rbtn.spin{animation:sp .6s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ── 用量卡片 ── */
+.ucards{display:flex;flex-direction:column;gap:14px}
+.uc{background:var(--card);border:1px solid var(--border);border-radius:var(--r);
+  padding:22px 24px;box-shadow:0 2px 12px rgba(91,80,232,.05);transition:box-shadow .2s}
+.uc:hover{box-shadow:0 4px 20px rgba(91,80,232,.1)}
+
+/* ── 卡片内布局 ── */
+.uc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.uc-left{display:flex;align-items:center;gap:10px}
+.ucico{width:36px;height:36px;border-radius:9px;background:var(--al);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.uctitle{font-size:15px;font-weight:600}
+.ucwin{color:var(--t2);font-size:12px;margin-top:2px}
+
+.uc-right{text-align:right;flex-shrink:0}
+.ucpct{font-size:28px;font-weight:800;letter-spacing:-1px;line-height:1}
+.ucpct.ok{color:var(--accent)}.ucpct.warn{color:var(--warn)}.ucpct.crit{color:var(--crit)}
+.ucreset{color:var(--t3);font-size:11px;margin-top:4px}
+
+/* ── 进度条（无浮动标签） ── */
+.btrack{height:10px;background:var(--bar-bg);border-radius:5px;margin-bottom:10px;
+  position:relative;overflow:hidden}
+.bfill{height:100%;border-radius:5px;
+  background:linear-gradient(90deg,#6c63ff,#a78bfa);
+  transition:width .6s cubic-bezier(.4,0,.2,1);max-width:100%}
+.bfill.warn{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
+.bfill.crit{background:linear-gradient(90deg,#ef4444,#f87171)}
+/* 90% 虚线标记（不用文字，不会重叠） */
+.btrack::after{content:'';position:absolute;top:0;right:10%;
+  width:1px;height:100%;background:rgba(99,102,241,.5)}
+
+/* ── 底部数字 ── */
+.uc-nums{display:flex;justify-content:space-between;align-items:center}
+.ucused{font-size:13px;font-weight:600;color:var(--text)}
+.ucused span{color:var(--t2);font-weight:400}
+.ucleft{font-size:13px;color:var(--t2)}
+.ucleft strong{font-weight:600}
+.ucleft.ok strong{color:var(--ok)}.ucleft.warn strong{color:var(--warn)}.ucleft.crit strong{color:var(--crit)}
+
+/* ── Key 展示 ── */
+.kbox{background:#f8faff;border:1px solid var(--border);border-radius:10px;
+  padding:14px 18px;display:flex;align-items:center;justify-content:space-between;margin-top:14px}
+.klabel{font-size:11px;color:var(--t2);margin-bottom:4px}
+.kval{font-family:var(--mono);font-size:12px;color:var(--text)}
+.cpsm{background:none;border:1px solid var(--border);border-radius:7px;padding:6px 12px;
+  color:var(--t2);cursor:pointer;font-size:12px;transition:all .2s;white-space:nowrap}
+.cpsm:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ── 警告横幅 ── */
+.ab{padding:12px 18px;border-radius:10px;margin-bottom:12px;font-size:13px;
+  display:none;align-items:center;gap:10px}
+.ab.warn{background:#fffbeb;border:1px solid #fde68a;color:var(--warn)}
+.ab.crit{background:#fef2f2;border:1px solid #fecaca;color:var(--crit)}
+.ab.show{display:flex}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="lc">
+    <div class="brand">
+      <div class="bico">⚡</div>
+      <div class="bname">Dash<span>Proxy</span></div>
+    </div>
+    <h2>用量查询</h2>
+    <p>输入您的 API Key 查看配额使用情况</p>
+    <div class="iw">
+      <span class="iico">🔑</span>
+      <input type="text" id="ki" placeholder="sk-sub-xxxxxxxxxx" autocomplete="off">
+    </div>
+    <button class="btn-q" onclick="doQ()">查询用量</button>
+    <div class="ierr" id="ierr">Key 无效或已失效，请联系管理员</div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="pw">
+    <div class="uh">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div class="uav" id="uav">A</div>
+        <div>
+          <div class="uname" id="uname">—</div>
+          <div class="umeta" id="umeta">—</div>
+        </div>
+      </div>
+      <div class="ustatus"><div class="dot"></div><span style="color:var(--ok)">运行中</span></div>
+    </div>
+
+    <div class="ab" id="ab"><span id="ai"></span><span id="am"></span></div>
+
+    <div class="rrow">
+      <div class="rtitle">用量消耗</div>
+      <div class="rinfo">
+        <div class="rts" id="rts">—</div>
+        <div class="rbtn" id="rbtn" onclick="loadU()">⟳</div>
+      </div>
+    </div>
+
+    <div class="ucards" id="ucards"></div>
+
+    <div class="kbox">
+      <div>
+        <div class="klabel">您的 API Key</div>
+        <div class="kval" id="showk">—</div>
+      </div>
+      <button class="cpsm" id="cpk" onclick="cpKey()">复制</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let myKey='', D=null;
+
+async function doQ(){
+  const k=document.getElementById('ki').value.trim(); if(!k)return;
+  const r=await fetch('/_usage',{headers:{'Authorization':'Bearer '+k}});
+  if(r.ok){myKey=k;D=await r.json();
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='block';
+    render();}
+  else document.getElementById('ierr').style.display='block';
+}
+document.getElementById('ki').addEventListener('keydown',e=>e.key==='Enter'&&doQ());
+
+async function loadU(){
+  const b=document.getElementById('rbtn'); b.classList.add('spin');
+  const r=await fetch('/_usage',{headers:{'Authorization':'Bearer '+myKey}});
+  if(r.ok){D=await r.json();render();}
+  setTimeout(()=>b.classList.remove('spin'),500);
+}
+
+function pc(p){return p>=90?'crit':p>=70?'warn':'ok'}
+
+function render(){
+  document.getElementById('uav').textContent=(D.label||'?')[0];
+  document.getElementById('uname').textContent=D.label;
+  document.getElementById('umeta').textContent=D.kid+' · 已用量';
+  document.getElementById('showk').textContent=myKey;
+
+  const now=new Date();
+  document.getElementById('rts').textContent=
+    '最后统计时间 '+now.toLocaleDateString('zh-CN')+' '+now.toLocaleTimeString('zh-CN');
+
+  // 警告横幅
+  const mp=Math.max(D.pct.month,D.pct.week,D.pct['5h']);
+  const ab=document.getElementById('ab');
+  if(mp>=90){ab.className='ab crit show';document.getElementById('am').textContent='配额即将耗尽，请联系管理员';}
+  else if(mp>=70){ab.className='ab warn show';document.getElementById('am').textContent='配额使用已超 70%，请注意';}
+  else ab.className='ab';
+
+  const cards=[
+    {title:'近一月用量',dim:'month',ico:'📅',win:'自然月固定窗口'},
+    {title:'近一周用量',dim:'week', ico:'📆',win:'自然周固定窗口'},
+    {title:'近 5 小时用量',dim:'5h',ico:'⏱',win:'5小时固定块窗口'},
+  ];
+
+  document.getElementById('ucards').innerHTML=cards.map(({title,dim,ico,win})=>{
+    const used=D.usage[dim], lim=D.limits[dim];
+    const pct=Math.min(100,Math.round(used/lim*100));
+    const left=lim-used, cls=pc(pct);
+    const reset=D.reset_at[dim];
+    return `<div class="uc">
+      <div class="uc-top">
+        <div class="uc-left">
+          <div class="ucico">${ico}</div>
+          <div>
+            <div class="uctitle">${title}</div>
+            <div class="ucwin">🔄 ${win}</div>
+          </div>
+        </div>
+        <div class="uc-right">
+          <div class="ucpct ${cls}">${pct}%</div>
+          <div class="ucreset">重置于 ${reset}</div>
+        </div>
+      </div>
+      <div class="btrack">
+        <div class="bfill ${cls==='ok'?'':cls}" style="width:${pct}%"></div>
+      </div>
+      <div class="uc-nums">
+        <div class="ucused">${used.toLocaleString()} <span>/ ${lim.toLocaleString()} 次</span></div>
+        <div class="ucleft ${cls}">剩余 <strong>${left.toLocaleString()} 次</strong></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function cpKey(){
+  await navigator.clipboard.writeText(myKey);
+  const b=document.getElementById('cpk'); b.textContent='已复制 ✓';
+  setTimeout(()=>b.textContent='复制',2000);
+}
+
+setInterval(()=>{if(myKey)loadU();},60000);
+</script>
+</body>
+</html>

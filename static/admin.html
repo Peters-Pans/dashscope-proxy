@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理后台 — DashScope 代理</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3250;
+  --accent:#6c63ff;--accent2:#a78bfa;
+  --success:#34d399;--warning:#fbbf24;--danger:#f87171;
+  --text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
+  --r:12px;--font:'Noto Sans SC',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
+
+/* ── 登录 ── */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;
+  background:radial-gradient(ellipse at 50% 0%,#1e1b4b 0%,var(--bg) 70%)}
+.lc{background:var(--surface);border:1px solid var(--border);border-radius:20px;
+  padding:48px 40px;width:360px;box-shadow:0 24px 64px rgba(0,0,0,.5)}
+.lc h1{font-size:22px;font-weight:600;margin-bottom:4px}
+.lc p{color:var(--text2);font-size:13px;margin-bottom:28px}
+.lc input{width:100%;padding:12px 16px;border-radius:10px;border:1px solid var(--border);
+  background:var(--bg);color:var(--text);font-family:var(--mono);font-size:14px;
+  margin-bottom:14px;outline:none;transition:border-color .2s}
+.lc input:focus{border-color:var(--accent)}
+.btn-login{width:100%;padding:13px;border-radius:10px;background:var(--accent);
+  color:#fff;font-size:15px;font-weight:600;border:none;cursor:pointer;transition:opacity .2s}
+.btn-login:hover{opacity:.88}
+.lerr{color:var(--danger);font-size:13px;margin-top:10px;text-align:center;display:none}
+
+/* ── 主布局 ── */
+#app{display:none}
+.topbar{display:flex;align-items:center;justify-content:space-between;
+  padding:16px 28px;border-bottom:1px solid var(--border);background:var(--surface);
+  position:sticky;top:0;z-index:100}
+.logo{font-size:18px;font-weight:700}.logo span{color:var(--accent2)}
+.badge{background:rgba(108,99,255,.2);color:var(--accent2);border:1px solid rgba(108,99,255,.4);
+  padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;margin-left:10px}
+.refresh-btn{display:flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text2);
+  cursor:pointer;font-size:13px;transition:all .2s}
+.refresh-btn:hover{border-color:var(--accent);color:var(--text)}
+.ts{color:var(--text3);font-size:12px}
+.out{color:var(--text3);cursor:pointer;font-size:13px;padding:8px;border-radius:6px;transition:color .2s}
+.out:hover{color:var(--danger)}
+
+.content{padding:28px;max-width:1200px;margin:0 auto}
+
+/* ── 总览 ── */
+.ov{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px}
+.ovc{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px 22px}
+.ov-label{color:var(--text2);font-size:11px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.ov-val{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.ov-sub{color:var(--text3);font-size:12px;margin-top:4px}
+
+/* ── Key 卡片 ── */
+.kg{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:900px){.kg{grid-template-columns:1fr}}
+.kc{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  overflow:hidden;transition:border-color .2s}
+.kc:hover{border-color:var(--accent)}
+.kc.disabled{opacity:.55}
+
+.kh{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--border)}
+.khl{display:flex;align-items:center;gap:10px}
+.kav{width:36px;height:36px;border-radius:10px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;color:#fff;flex-shrink:0}
+.kname{font-weight:600;font-size:15px;cursor:pointer}.kname:hover{color:var(--accent2)}
+.knote{color:var(--text3);font-size:12px;margin-top:2px}
+
+.sdot{width:8px;height:8px;border-radius:50%;background:var(--success);box-shadow:0 0 6px var(--success)}
+.sdot.off{background:var(--text3);box-shadow:none}
+.ibtn{width:30px;height:30px;border-radius:7px;background:var(--surface2);border:1px solid var(--border);
+  color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:13px;transition:all .2s}
+.ibtn:hover{border-color:var(--accent);color:var(--text)}
+.ibtn.dng:hover{border-color:var(--danger);color:var(--danger)}
+
+.ksec{display:flex;align-items:center;gap:8px;margin:14px 20px 0;
+  background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px}
+.ksec code{font-family:var(--mono);font-size:12px;color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cpbtn{background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:2px 8px;
+  border-radius:5px;transition:color .2s;flex-shrink:0;white-space:nowrap}
+.cpbtn:hover{color:var(--accent2)}.cpbtn.ok{color:var(--success)}
+.eyebtn{background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:2px 6px;
+  border-radius:5px;transition:color .2s;flex-shrink:0;line-height:1}
+.eyebtn:hover{color:var(--accent2)}
+
+/* ── 用量行 ── */
+.ku{padding:14px 20px 18px}
+.urow{margin-bottom:14px}.urow:last-child{margin-bottom:0}
+.umeta{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px}
+.ulabel{font-size:12px;color:var(--text2);font-weight:500;white-space:nowrap}
+.unums{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.uused{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.ulim{color:var(--text3);font-size:12px;font-variant-numeric:tabular-nums}
+.pbadge{font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap}
+.pbadge.ok{background:rgba(52,211,153,.15);color:var(--success)}
+.pbadge.warn{background:rgba(251,191,36,.15);color:var(--warning)}
+.pbadge.crit{background:rgba(248,113,113,.15);color:var(--danger)}
+
+.bwrap{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin-bottom:4px}
+.bfill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .5s ease;max-width:100%}
+.bfill.warn{background:linear-gradient(90deg,var(--warning),#f59e0b)}
+.bfill.crit{background:linear-gradient(90deg,var(--danger),#ef4444)}
+.ureset{color:var(--text3);font-size:11px}
+
+/* ── 弹窗 ── */
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);
+  z-index:200;align-items:center;justify-content:center}
+.mo.open{display:flex}
+.md{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;
+  width:420px;box-shadow:0 24px 64px rgba(0,0,0,.5);animation:su .2s ease}
+@keyframes su{from{transform:translateY(16px);opacity:0}to{transform:translateY(0);opacity:1}}
+.md h3{font-size:17px;font-weight:600;margin-bottom:6px}
+.md .sub{color:var(--text2);font-size:13px;margin-bottom:22px}
+.fg{margin-bottom:16px}
+.fg label{display:block;color:var(--text2);font-size:11px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.fg input{width:100%;padding:10px 14px;border-radius:9px;border:1px solid var(--border);
+  background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;outline:none;transition:border-color .2s}
+.fg input:focus{border-color:var(--accent)}
+.fg .hint{color:var(--text3);font-size:11px;margin-top:5px}
+.mf{display:flex;gap:10px;justify-content:flex-end;margin-top:22px}
+.btn{padding:9px 20px;border-radius:9px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .2s}
+.btn-g{background:var(--surface2);border:1px solid var(--border);color:var(--text2)}
+.btn-g:hover{color:var(--text);border-color:var(--text2)}
+.btn-p{background:var(--accent);color:#fff}.btn-p:hover{opacity:.88}
+.btn-d{background:rgba(248,113,113,.15);border:1px solid rgba(248,113,113,.3);color:var(--danger)}
+.btn-d:hover{background:rgba(248,113,113,.25)}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:24px;right:24px;z-index:999;background:var(--surface2);
+  border:1px solid var(--border);border-radius:10px;padding:12px 18px;color:var(--text);
+  font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4);
+  transform:translateY(60px);opacity:0;transition:all .3s ease;pointer-events:none}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.s{border-color:rgba(52,211,153,.4)}.toast.e{border-color:rgba(248,113,113,.4)}
+
+[data-tip]{position:relative}
+[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);
+  left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);
+  border-radius:6px;padding:5px 10px;font-size:11px;color:var(--text2);white-space:nowrap;
+  pointer-events:none;z-index:300}
+
+.divider{height:1px;background:var(--border);margin:16px 0}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="lc">
+    <div style="font-size:32px;margin-bottom:16px">🔐</div>
+    <h1>管理后台</h1>
+    <p>DashScope 代理 · 配额管理</p>
+    <input type="password" id="tok" placeholder="Admin Token" autocomplete="off">
+    <button class="btn-login" onclick="doLogin()">进入后台</button>
+    <div class="lerr" id="lerr">Token 错误，请重试</div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <div style="display:flex;align-items:center">
+      <div class="logo">Dash<span>Proxy</span></div>
+      <div class="badge">管理员</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px">
+      <div class="ts" id="ts">—</div>
+      <button class="refresh-btn" onclick="loadData()">⟳ 刷新</button>
+      <div class="out" onclick="logout()">退出</div>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="ov">
+      <div class="ovc"><div class="ov-label">活跃子KEY</div><div class="ov-val" id="ov-a">—</div><div class="ov-sub">共 4 个</div></div>
+      <div class="ovc"><div class="ov-label">月请求总量</div><div class="ov-val" id="ov-m">—</div><div class="ov-sub">/ 90,000 次</div></div>
+      <div class="ovc"><div class="ov-label">本周请求总量</div><div class="ov-val" id="ov-w">—</div><div class="ov-sub">/ 45,000 次</div></div>
+      <div class="ovc"><div class="ov-label">近5小时总量</div><div class="ov-val" id="ov-5">—</div><div class="ov-sub">/ 6,000 次</div></div>
+    </div>
+    <div class="kg" id="kg"><div style="padding:40px;color:var(--text3);text-align:center">加载中…</div></div>
+  </div>
+</div>
+
+<!-- 限额弹窗 -->
+<div class="mo" id="m-limits">
+  <div class="md">
+    <h3>修改配额限制</h3>
+    <div class="sub" id="m-limits-sub">留空表示使用全局默认值</div>
+    <div class="fg"><label>月限额（自然月）</label><input type="number" id="i-month" placeholder="默认 22,500"><div class="hint">全局默认 22,500 次 / 月</div></div>
+    <div class="fg"><label>周限额（自然周）</label><input type="number" id="i-week" placeholder="默认 11,250"><div class="hint">全局默认 11,250 次 / 周</div></div>
+    <div class="fg"><label>5小时限额（固定5小时块）</label><input type="number" id="i-5h" placeholder="默认 1,500"><div class="hint">全局默认 1,500 次 / 5小时</div></div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="closeM('m-limits')">取消</button>
+      <button class="btn btn-p" onclick="saveLimits()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 用量弹窗 -->
+<div class="mo" id="m-usage">
+  <div class="md">
+    <h3>手动修改用量</h3>
+    <div class="sub" id="m-usage-sub">直接写入当前周期的已用请求数</div>
+    <div class="fg"><label>月用量（当前自然月）</label><input type="number" id="u-month" placeholder="0" min="0"><div class="hint" id="u-month-hint"></div></div>
+    <div class="fg"><label>周用量（当前自然周）</label><input type="number" id="u-week" placeholder="0" min="0"><div class="hint" id="u-week-hint"></div></div>
+    <div class="fg"><label>5小时用量（当前块）</label><input type="number" id="u-5h" placeholder="0" min="0"><div class="hint" id="u-5h-hint"></div></div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="closeM('m-usage')">取消</button>
+      <button class="btn btn-p" onclick="saveUsage()">写入</button>
+    </div>
+  </div>
+</div>
+
+<!-- 标签弹窗 -->
+<div class="mo" id="m-label">
+  <div class="md">
+    <h3>编辑用户信息</h3>
+    <div class="sub">设置名称和备注</div>
+    <div class="fg"><label>用户名称</label><input type="text" id="i-label" placeholder="用户A"></div>
+    <div class="fg"><label>备注</label><input type="text" id="i-note" placeholder="试用期 / 正式用户…"></div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="closeM('m-label')">取消</button>
+      <button class="btn btn-p" onclick="saveLabel()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 确认弹窗 -->
+<div class="mo" id="m-confirm">
+  <div class="md">
+    <h3 id="ct">确认操作</h3>
+    <div class="sub" id="cm">此操作不可撤销</div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="closeM('m-confirm')">取消</button>
+      <button class="btn btn-d" id="cok">确认</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let tok='', data=[], ek=null;
+
+async function doLogin(){
+  const t=document.getElementById('tok').value.trim(); if(!t)return;
+  const r=await fetch('/_admin/keys',{headers:{'X-Admin-Token':t}});
+  if(r.ok){tok=t;document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='block';await loadData();}
+  else document.getElementById('lerr').style.display='block';
+}
+document.getElementById('tok').addEventListener('keydown',e=>e.key==='Enter'&&doLogin());
+function logout(){tok='';document.getElementById('app').style.display='none';document.getElementById('login-screen').style.display='flex';}
+
+async function loadData(){
+  const r=await fetch('/_admin/keys',{headers:{'X-Admin-Token':tok}});
+  if(!r.ok){showT('加载失败','e');return;}
+  data=await r.json(); renderOv(); renderKeys();
+  document.getElementById('ts').textContent='最后更新 '+new Date().toLocaleTimeString('zh-CN');
+}
+
+function renderOv(){
+  const act=data.filter(k=>k.enabled).length;
+  document.getElementById('ov-a').textContent=act;
+  document.getElementById('ov-m').textContent=data.reduce((s,k)=>s+k.usage.month,0).toLocaleString();
+  document.getElementById('ov-w').textContent=data.reduce((s,k)=>s+k.usage.week,0).toLocaleString();
+  document.getElementById('ov-5').textContent=data.reduce((s,k)=>s+k.usage['5h'],0).toLocaleString();
+}
+
+function pc(p){return p>=90?'crit':p>=70?'warn':'ok'}
+
+function renderKeys(){
+  const g=document.getElementById('kg');
+  if(!data.length){g.innerHTML='<div style="padding:40px;color:var(--text3)">暂无数据</div>';return;}
+  g.innerHTML=data.map(k=>{
+    const l=k.limits_effective;
+    const rows=[
+      {label:'近一月',dim:'month',window:'自然月'},
+      {label:'近一周',dim:'week',window:'自然周'},
+      {label:'近5小时',dim:'5h',window:'5小时块'},
+    ].map(({label,dim,window})=>{
+      const used=k.usage[dim],lim=l[dim],pct=Math.min(100,Math.round(used/lim*100));
+      const cls=pc(pct), reset=k.period_info[dim];
+      return `<div class="urow">
+        <div class="umeta">
+          <span class="ulabel">${label} <span style="color:var(--text3);font-size:11px">(${window})</span></span>
+          <div class="unums">
+            <span class="uused">${used.toLocaleString()}</span>
+            <span class="ulim">/ ${lim.toLocaleString()}</span>
+            <span class="pbadge ${cls}">${pct}%</span>
+          </div>
+        </div>
+        <div class="bwrap"><div class="bfill ${cls==='ok'?'':cls}" style="width:${pct}%"></div></div>
+        <div class="ureset">重置于 ${reset}</div>
+      </div>`;
+    }).join('');
+    return `<div class="kc ${k.enabled?'':'disabled'}" id="card-${k.kid}">
+      <div class="kh">
+        <div class="khl">
+          <div class="kav">${(k.label||k.kid)[0]}</div>
+          <div>
+            <div class="kname" onclick="openLabel('${k.kid}')">${esc(k.label)}</div>
+            <div class="knote">${esc(k.note||k.kid)}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="sdot ${k.enabled?'':'off'}" data-tip="${k.enabled?'运行中':'已禁用'}"></div>
+          <div class="ibtn" onclick="openLimits('${k.kid}')" data-tip="修改限额">⚙</div>
+          <div class="ibtn" onclick="openUsage('${k.kid}')" data-tip="修改用量">✎</div>
+          <div class="ibtn" onclick="confirmRegen('${k.kid}')" data-tip="重新生成Key">↺</div>
+          <div class="ibtn ${k.enabled?'dng':''}" onclick="toggle('${k.kid}')" data-tip="${k.enabled?'禁用':'启用'}">${k.enabled?'⏸':'▶'}</div>
+        </div>
+      </div>
+      <div class="ksec">
+        <code id="sec-${k.kid}" data-secret="${k.secret}">${'•'.repeat(24)}</code>
+        <button class="eyebtn" id="eye-${k.kid}" onclick="toggleEye('${k.kid}')" title="显示/隐藏">👁</button>
+        <button class="cpbtn" id="cp-${k.kid}" onclick="copyS('${k.kid}')">复制</button>
+      </div>
+      <div class="ku">${rows}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── 操作 ──
+async function toggle(kid){
+  const r=await fetch(`/_admin/keys/${kid}/toggle`,{method:'POST',headers:{'X-Admin-Token':tok}});
+  if(r.ok){showT('状态已切换','s');await loadData();}else showT('操作失败','e');
+}
+function confirmRegen(kid){
+  ek=kid;const k=data.find(x=>x.kid===kid);
+  document.getElementById('ct').textContent='重新生成 API Key';
+  document.getElementById('cm').textContent=`将为「${k.label}」生成新密钥，旧密钥立即失效。`;
+  document.getElementById('cok').onclick=()=>regen(kid);
+  openM('m-confirm');
+}
+async function regen(kid){
+  closeM('m-confirm');
+  const r=await fetch(`/_admin/keys/${kid}/regenerate`,{method:'POST',headers:{'X-Admin-Token':tok}});
+  if(r.ok){showT('新 Key 已生成','s');await loadData();}else showT('操作失败','e');
+}
+
+// ── 限额弹窗 ──
+function openLimits(kid){
+  ek=kid;const k=data.find(x=>x.kid===kid);
+  document.getElementById('m-limits-sub').textContent=`修改「${k.label}」的配额（留空=全局默认）`;
+  document.getElementById('i-month').value=k.limits.month??'';
+  document.getElementById('i-week').value=k.limits.week??'';
+  document.getElementById('i-5h').value=k.limits['5h']??'';
+  openM('m-limits');
+}
+async function saveLimits(){
+  const body={'month':document.getElementById('i-month').value||null,'week':document.getElementById('i-week').value||null,'5h':document.getElementById('i-5h').value||null};
+  const r=await fetch(`/_admin/keys/${ek}/limits`,{method:'PUT',headers:{'X-Admin-Token':tok,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(r.ok){closeM('m-limits');showT('限额已更新','s');await loadData();}else showT('保存失败','e');
+}
+
+// ── 用量弹窗 ──
+function openUsage(kid){
+  ek=kid;const k=data.find(x=>x.kid===kid);
+  const l=k.limits_effective;
+  document.getElementById('m-usage-sub').textContent=`修改「${k.label}」当前周期的已用量`;
+  document.getElementById('u-month').value=k.usage.month;
+  document.getElementById('u-week').value=k.usage.week;
+  document.getElementById('u-5h').value=k.usage['5h'];
+  document.getElementById('u-month-hint').textContent=`限额 ${l.month.toLocaleString()}，重置于 ${k.period_info.month}`;
+  document.getElementById('u-week-hint').textContent=`限额 ${l.week.toLocaleString()}，重置于 ${k.period_info.week}`;
+  document.getElementById('u-5h-hint').textContent=`限额 ${l['5h'].toLocaleString()}，重置于 ${k.period_info['5h']}`;
+  openM('m-usage');
+}
+async function saveUsage(){
+  const body={'month':document.getElementById('u-month').value,'week':document.getElementById('u-week').value,'5h':document.getElementById('u-5h').value};
+  const r=await fetch(`/_admin/keys/${ek}/usage`,{method:'PUT',headers:{'X-Admin-Token':tok,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(r.ok){closeM('m-usage');showT('用量已修改','s');await loadData();}else showT('保存失败','e');
+}
+
+// ── 标签弹窗 ──
+function openLabel(kid){
+  ek=kid;const k=data.find(x=>x.kid===kid);
+  document.getElementById('i-label').value=k.label;
+  document.getElementById('i-note').value=k.note||'';
+  openM('m-label');
+}
+async function saveLabel(){
+  const body={label:document.getElementById('i-label').value.trim(),note:document.getElementById('i-note').value.trim()};
+  const r=await fetch(`/_admin/keys/${ek}/label`,{method:'PUT',headers:{'X-Admin-Token':tok,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(r.ok){closeM('m-label');showT('信息已更新','s');await loadData();}else showT('保存失败','e');
+}
+
+// ── 复制 ──
+function toggleEye(kid){
+  const el=document.getElementById('sec-'+kid);
+  const btn=document.getElementById('eye-'+kid);
+  if(el.textContent.startsWith('•')){el.textContent=el.dataset.secret;btn.textContent='🙈';}
+  else{el.textContent='•'.repeat(24);btn.textContent='👁';}
+}
+async function copyS(kid){
+  const el=document.getElementById('sec-'+kid);
+  await navigator.clipboard.writeText(el.dataset.secret);
+  const b=document.getElementById(`cp-${kid}`);b.textContent='已复制';b.classList.add('ok');
+  setTimeout(()=>{b.textContent='复制';b.classList.remove('ok');},2000);
+}
+
+// ── 弹窗 / Toast ──
+function openM(id){document.getElementById(id).classList.add('open')}
+function closeM(id){document.getElementById(id).classList.remove('open')}
+let tT;
+function showT(msg,t=''){
+  const el=document.getElementById('toast');
+  el.textContent=(t==='s'?'✓ ':t==='e'?'✗ ':'')+msg;
+  el.className=`toast show ${t}`;clearTimeout(tT);
+  tT=setTimeout(()=>el.classList.remove('show'),2800);
+}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+document.querySelectorAll('.mo').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open')}));
+</script>
+</body>
+</html>
