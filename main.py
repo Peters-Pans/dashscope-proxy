@@ -203,6 +203,13 @@ def _check_admin(request: Request):
         raise HTTPException(status_code=403)
 
 
+def _mask_secret(secret: str) -> str:
+    """脱敏显示 secret：sk-sub-****xxxx（保留前缀和后4位）"""
+    if len(secret) <= 8:
+        return "****"
+    return f"{secret[:7]}****{secret[-4:]}"
+
+
 @app.get("/_admin/keys")
 async def admin_list_keys(request: Request):
     _check_admin(request)
@@ -214,7 +221,8 @@ async def admin_list_keys(request: Request):
         used = await _usage(meta["kid"])
         pi   = period_info(meta["kid"])
         result.append({
-            **meta,
+            **{k: v for k, v in meta.items() if k != "secret"},  # 排除完整 secret
+            "secret_preview": _mask_secret(meta["secret"]),      # 返回脱敏版本
             "limits_effective": lims,
             "usage": used,
             "pct":   {k: round(used[k] / lims[k] * 100, 1) for k in lims},
@@ -241,6 +249,15 @@ async def admin_regenerate(kid: str, request: Request):
     meta["secret"] = "sk-sub-" + "".join(
         secrets.choice(string.ascii_lowercase + string.digits) for _ in range(24))
     await _save_meta(meta)
+    return {"kid": kid, "secret": meta["secret"]}
+
+
+@app.get("/_admin/keys/{kid}/secret")
+async def admin_reveal_secret(kid: str, request: Request):
+    """获取完整 secret（敏感操作，需要 admin token）"""
+    _check_admin(request)
+    meta = await _get_meta(kid)
+    if not meta: raise HTTPException(404)
     return {"kid": kid, "secret": meta["secret"]}
 
 

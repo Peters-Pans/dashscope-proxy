@@ -317,9 +317,9 @@ function renderKeys(){
         </div>
       </div>
       <div class="ksec">
-        <code id="sec-${k.kid}" data-secret="${k.secret}">${'•'.repeat(24)}</code>
-        <button class="eyebtn" id="eye-${k.kid}" onclick="toggleEye('${k.kid}')" title="显示/隐藏">👁</button>
-        <button class="cpbtn" id="cp-${k.kid}" onclick="copyS('${k.kid}')">复制</button>
+        <code id="sec-${k.kid}" data-secret="">••••••••****••••</code>
+        <button class="eyebtn" id="eye-${k.kid}" onclick="toggleEye('${k.kid}')" title="显示完整">👁</button>
+        <button class="cpbtn" id="cp-${k.kid}" onclick="copyS('${k.kid}')" data-tip="需先显示完整">复制</button>
       </div>
       <div class="ku">${rows}</div>
     </div>`;
@@ -392,15 +392,35 @@ async function saveLabel(){
 }
 
 // ── 复制 ──
+async function revealSecret(kid){
+  const r=await fetch(`/_admin/keys/${kid}/secret`,{headers:{'X-Admin-Token':tok}});
+  if(r.ok){
+    const d=await r.json();
+    const el=document.getElementById('sec-'+kid);
+    el.textContent=d.secret;
+    el.dataset.secret=d.secret;
+    document.getElementById('eye-'+kid).textContent='🙈';
+  }else showT('获取失败','e');
+}
 function toggleEye(kid){
   const el=document.getElementById('sec-'+kid);
   const btn=document.getElementById('eye-'+kid);
-  if(el.textContent.startsWith('•')){el.textContent=el.dataset.secret;btn.textContent='🙈';}
-  else{el.textContent='•'.repeat(24);btn.textContent='👁';}
+  if(el.textContent.startsWith('•')||el.textContent.includes('****')){
+    // 需要从API获取完整secret
+    revealSecret(kid);
+  }else if(el.textContent===el.dataset.secret){
+    el.textContent='•'.repeat(24);
+    btn.textContent='👁';
+  }
 }
 async function copyS(kid){
   const el=document.getElementById('sec-'+kid);
-  await navigator.clipboard.writeText(el.dataset.secret);
+  const secret=el.dataset.secret;
+  if(!secret||secret===''){
+    showT('请先点击眼睛图标显示完整Key','e');
+    return;
+  }
+  await navigator.clipboard.writeText(secret);
   const b=document.getElementById(`cp-${kid}`);b.textContent='已复制';b.classList.add('ok');
   setTimeout(()=>{b.textContent='复制';b.classList.remove('ok');},2000);
 }
