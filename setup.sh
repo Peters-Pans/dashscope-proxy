@@ -97,11 +97,14 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: redis-server --requirepass "${REDIS_PASS_VAL}" --save 60 1 --loglevel warning
+    # 使用 sh -c 从环境变量读取密码，避免密码出现在 docker logs / ps 中
+    command: sh -c 'redis-server --requirepass "$$REDIS_PASSWORD" --save 60 1 --loglevel warning'
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASS_VAL}"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASS_VAL}", "ping"]
+      test: ["CMD", "sh", "-c", "redis-cli -a \"$$REDIS_PASSWORD\" ping"]
       interval: 5s
       timeout: 3s
       retries: 5
