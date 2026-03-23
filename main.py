@@ -11,11 +11,38 @@ from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from redis.asyncio import Redis
+from pydantic import BaseModel, Field, ConfigDict
 
 # ─────────────────────────────────────────
 #  默认配额（每个子Key）
 # ─────────────────────────────────────────
 DEFAULT_LIMITS = {"5h": 1_500, "week": 11_250, "month": 22_500}
+
+# ─────────────────────────────────────────
+#  Pydantic 校验模型
+# ─────────────────────────────────────────
+class LimitsUpdate(BaseModel):
+    """配额限制更新"""
+    model_config = ConfigDict(populate_by_name=True)
+    
+    month: int | None = Field(None, ge=0, le=1_000_000_000, description="月限额")
+    week: int | None = Field(None, ge=0, le=500_000_000, description="周限额")
+    five_hour: int | None = Field(None, alias="5h", ge=0, le=100_000_000, description="5小时限额")
+
+
+class LabelUpdate(BaseModel):
+    """用户标签更新"""
+    label: str = Field(..., max_length=100, description="用户名称")
+    note: str = Field("", max_length=1000, description="备注")
+
+
+class UsageUpdate(BaseModel):
+    """用量更新"""
+    model_config = ConfigDict(populate_by_name=True)
+    
+    month: int | None = Field(None, ge=0, le=1_000_000_000, description="月用量")
+    week: int | None = Field(None, ge=0, le=500_000_000, description="周用量")
+    five_hour: int | None = Field(None, alias="5h", ge=0, le=100_000_000, description="5小时用量")
 
 # Coding Plan 包含的模型白名单，只有调用这些模型才计入配额
 # 非白名单模型：直接拒绝 403，不扣配额
@@ -262,44 +289,48 @@ async def admin_reveal_secret(kid: str, request: Request):
 
 
 @app.put("/_admin/keys/{kid}/limits")
-async def admin_set_limits(kid: str, request: Request):
+async def admin_set_limits(kid: str, body: LimitsUpdate, request: Request):
     _check_admin(request)
-    body = await request.json()
     meta = await _get_meta(kid)
     if not meta: raise HTTPException(404)
-    for k in ("5h", "week", "month"):
-        if k in body:
-            meta["limits"][k] = int(body[k]) if body[k] is not None else None
+    # 使用 Pydantic 模型的字段名映射
+    if body.month is not None:
+        meta["limits"]["month"] = body.month
+    if body.week is not None:
+        meta["limits"]["week"] = body.week
+    if body.five_hour is not None:
+        meta["limits"]["5h"] = body.five_hour
     await _save_meta(meta)
     return {"kid": kid, "limits": meta["limits"], "effective": _limits(meta)}
 
 
 @app.put("/_admin/keys/{kid}/label")
-async def admin_set_label(kid: str, request: Request):
+async def admin_set_label(kid: str, body: LabelUpdate, request: Request):
     _check_admin(request)
-    body = await request.json()
     meta = await _get_meta(kid)
     if not meta: raise HTTPException(404)
-    meta["label"] = body.get("label", meta["label"])
-    meta["note"]  = body.get("note",  meta["note"])
+    meta["label"] = body.label
+    meta["note"] = body.note
     await _save_meta(meta)
     return {"kid": kid, "label": meta["label"], "note": meta["note"]}
 
 
 @app.put("/_admin/keys/{kid}/usage")
-async def admin_set_usage(kid: str, request: Request):
+async def admin_set_usage(kid: str, body: UsageUpdate, request: Request):
     """手动修改当前周期的已用量"""
     _check_admin(request)
-    body = await request.json()  # {"5h": 100, "week": 500, "month": 1000}
     meta = await _get_meta(kid)
     if not meta: raise HTTPException(404)
     pi = period_info(kid)
-    for dim in ("5h", "week", "month"):
-        if dim in body and body[dim] is not None:
-            val = max(0, int(body[dim]))
-            key = pi[dim]["key"]
-            await rdb.set(key, val)
-            await rdb.expireat(key, pi[dim]["expire_at"])
+    if body.month is not None:
+        await rdb.set(pi["month"]["key"], body.month)
+        await rdb.expireat(pi["month"]["key"], pi["month"]["expire_at"])
+    if body.week is not None:
+        await rdb.set(pi["week"]["key"], body.week)
+        await rdb.expireat(pi["week"]["key"], pi["week"]["expire_at"])
+    if body.five_hour is not None:
+        await rdb.set(pi["5h"]["key"], body.five_hour)
+        await rdb.expireat(pi["5h"]["key"], pi["5h"]["expire_at"])
     return {"kid": kid, "usage": await _usage(kid)}
 
 
