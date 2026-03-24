@@ -57,7 +57,7 @@ PLAN_MODELS: set[str] = {
     "kimi-k2.5",
 }
 
-ALIYUN_BASE = os.getenv("ALIYUN_BASE_URL", "https://coding.dashscope.aliyuncs.com")
+ALIYUN_BASE = os.getenv("ALIYUN_BASE_URL", "https://coding.dashscope.aliyuncs.com/v1")
 ALIYUN_KEY  = os.getenv("ALIYUN_API_KEY", "")
 _admin_token_raw = os.getenv("ADMIN_TOKEN", "change-me")
 if _admin_token_raw == "change-me":
@@ -438,6 +438,10 @@ async def _forward(request: Request, path: str,
     透传请求到阿里云，自动处理流式/非流式。
     quota_keys: 若上游失败需要回滚的 Redis key 三元组，None 表示不回滚。
     """
+    # 去掉 path 开头的 v1/（因为 ALIYUN_BASE 已包含 /v1）
+    if path.startswith("v1/"):
+        path = path[3:]
+    
     is_stream = False
     if body:
         try:
