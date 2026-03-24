@@ -57,7 +57,7 @@ PLAN_MODELS: set[str] = {
     "kimi-k2.5",
 }
 
-ALIYUN_BASE = os.getenv("ALIYUN_BASE_URL", "https://coding.dashscope.aliyuncs.com/v1")
+ALIYUN_BASE = os.getenv("ALIYUN_BASE_URL", "https://coding.dashscope.aliyuncs.com")
 ALIYUN_KEY  = os.getenv("ALIYUN_API_KEY", "")
 _admin_token_raw = os.getenv("ADMIN_TOKEN", "change-me")
 if _admin_token_raw == "change-me":
