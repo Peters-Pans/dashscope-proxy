@@ -50,7 +50,7 @@ else
   cat > .env << ENVEOF
 # ── 阿里云 ──────────────────────────────────
 ALIYUN_API_KEY=${ALIYUN_KEY}
-ALIYUN_BASE_URL=https://coding.dashscope.aliyuncs.com
+ALIYUN_BASE_URL=https://coding.dashscope.aliyuncs.com/v1
 
 # ── Redis ────────────────────────────────────
 REDIS_URL=redis://:${REDIS_PASS}@redis:6379
