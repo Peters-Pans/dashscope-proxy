@@ -54,6 +54,7 @@ ALIYUN_BASE_URL=https://coding.dashscope.aliyuncs.com/v1
 
 # ── Redis ────────────────────────────────────
 REDIS_URL=redis://:${REDIS_PASS}@redis:6379
+REDIS_PASSWORD=${REDIS_PASS}
 
 # ── 管理员 Token ─────────────────────────────
 ADMIN_TOKEN=${ADMIN_TOKEN}
@@ -77,42 +78,6 @@ ENVEOF
   echo ""
   read -p "  已保存，按 Enter 继续..."
 fi
-
-# ── 更新 docker-compose.yml 加 Redis 密码 ────
-# 直接用生成时的变量，不需要再从 .env 解析
-REDIS_PASS_VAL=$REDIS_PASS
-
-cat > docker-compose.yml << DCEOF
-services:
-
-  proxy:
-    build: .
-    ports:
-      - "8000:8000"
-    env_file: .env
-    depends_on:
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    # 使用 sh -c 从环境变量读取密码，避免密码出现在 docker logs / ps 中
-    command: sh -c 'redis-server --requirepass "$$REDIS_PASSWORD" --save 60 1 --loglevel warning'
-    environment:
-      REDIS_PASSWORD: "${REDIS_PASS_VAL}"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "sh", "-c", "redis-cli -a \"$$REDIS_PASSWORD\" ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    restart: unless-stopped
-
-volumes:
-  redis_data:
-DCEOF
 
 # ── 构建并启动 ───────────────────────────────
 echo ""
