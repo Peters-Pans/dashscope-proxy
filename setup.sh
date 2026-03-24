@@ -117,7 +117,7 @@ DCEOF
 # ── 构建并启动 ───────────────────────────────
 echo ""
 info "构建镜像（首次可能需要几分钟）..."
-docker compose build --quiet
+docker compose build 2>&1 | tail -5
 success "镜像构建完成"
 
 info "启动服务..."
@@ -150,3 +150,4 @@ echo -e "  查看日志:  docker compose logs -f proxy"
 echo -e "  重启服务:  docker compose restart proxy"
 echo -e "  停止服务:  docker compose down"
 echo ""
+
