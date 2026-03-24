@@ -172,6 +172,8 @@ curl https://your-domain.com/_admin/keys/k1/secret \
 - 🔒 Redis 密码不再泄露到日志
 - 🔒 API Key 脱敏显示，需单独接口获取完整密钥
 - ✅ 添加 Pydantic 输入校验
+- 🐛 修复 API 路径转发问题（baseUrl 与官方一致，含 /v1）
+- 📝 完善 README 文档
 
 ## License
 
