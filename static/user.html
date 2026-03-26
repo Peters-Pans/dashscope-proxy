@@ -239,34 +239,124 @@ pre{padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;
       <!-- ── OpenAI 教程 ── -->
       <div class="tab-content active" id="tab-openai">
 
+        <!-- ── openclaw 专区 ── -->
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+          <span style="font-size:16px">🦞</span>
+          <span style="font-size:14px;font-weight:700;color:var(--text)">openclaw 接入（推荐）</span>
+        </div>
+
         <div class="step-card">
-          <div class="step-title"><div class="step-num">1</div>配置连接信息</div>
-          <div class="step-desc">在支持 OpenAI 协议的工具（openclaw、OpenCode、Cherry Studio 等）中填入以下配置：</div>
+          <div class="step-title"><div class="step-num">1</div>打开配置文件</div>
+          <div class="step-desc">openclaw 配置文件路径如下，不存在则新建：</div>
+          <div class="code-block">
+            <button class="code-copy" onclick="copyCode(this)">复制</button>
+            <pre>~/.openclaw/openclaw.json</pre>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-title"><div class="step-num">2</div>添加 bailian provider 配置</div>
+          <div class="step-desc">在 <code>models.providers</code> 中添加以下内容（若 <code>models</code> 字段不存在则整块新增；若已有其他 provider 则在 <code>providers</code> 下追加 <code>bailian</code> 块）：</div>
+          <div class="code-block">
+            <button class="code-copy" onclick="copyCode(this)">复制</button>
+            <pre>{
+  <span class="hl-key">"models"</span>: {
+    <span class="hl-key">"mode"</span>: <span class="hl-str">"merge"</span>,
+    <span class="hl-key">"providers"</span>: {
+      <span class="hl-key">"bailian"</span>: {
+        <span class="hl-key">"baseUrl"</span>: <span class="hl-str">"<span id="oc-json-url">https://your-domain.com/v1</span>"</span>,
+        <span class="hl-key">"apiKey"</span>:  <span class="hl-str">"<span id="oc-json-key">sk-sub-xxxxxxxxxx</span>"</span>,
+        <span class="hl-key">"api"</span>:     <span class="hl-str">"openai-completions"</span>,
+        <span class="hl-key">"models"</span>: [
+          { <span class="hl-key">"id"</span>: <span class="hl-str">"qwen3.5-plus"</span>,        <span class="hl-key">"name"</span>: <span class="hl-str">"qwen3.5-plus"</span>,        <span class="hl-key">"reasoning"</span>: <span class="hl-val">false</span>, <span class="hl-key">"input"</span>: [<span class="hl-str">"text"</span>,<span class="hl-str">"image"</span>], <span class="hl-key">"cost"</span>: {<span class="hl-key">"input"</span>:<span class="hl-val">0</span>,<span class="hl-key">"output"</span>:<span class="hl-val">0</span>,<span class="hl-key">"cacheRead"</span>:<span class="hl-val">0</span>,<span class="hl-key">"cacheWrite"</span>:<span class="hl-val">0</span>}, <span class="hl-key">"contextWindow"</span>: <span class="hl-val">1000000</span>, <span class="hl-key">"maxTokens"</span>: <span class="hl-val">65536</span>, <span class="hl-key">"compat"</span>: {<span class="hl-key">"thinkingFormat"</span>:<span class="hl-str">"qwen"</span>} },
+          { <span class="hl-key">"id"</span>: <span class="hl-str">"qwen3-max-2026-01-23"</span>, <span class="hl-key">"name"</span>: <span class="hl-str">"qwen3-max-2026-01-23"</span>, <span class="hl-key">"reasoning"</span>: <span class="hl-val">false</span>, <span class="hl-key">"input"</span>: [<span class="hl-str">"text"</span>],        <span class="hl-key">"cost"</span>: {<span class="hl-key">"input"</span>:<span class="hl-val">0</span>,<span class="hl-key">"output"</span>:<span class="hl-val">0</span>,<span class="hl-key">"cacheRead"</span>:<span class="hl-val">0</span>,<span class="hl-key">"cacheWrite"</span>:<span class="hl-val">0</span>}, <span class="hl-key">"contextWindow"</span>:  <span class="hl-val">262144</span>, <span class="hl-key">"maxTokens"</span>: <span class="hl-val">65536</span>, <span class="hl-key">"compat"</span>: {<span class="hl-key">"thinkingFormat"</span>:<span class="hl-str">"qwen"</span>} },
+          { <span class="hl-key">"id"</span>: <span class="hl-str">"qwen3-coder-next"</span>,    <span class="hl-key">"name"</span>: <span class="hl-str">"qwen3-coder-next"</span>,    <span class="hl-key">"reasoning"</span>: <span class="hl-val">false</span>, <span class="hl-key">"input"</span>: [<span class="hl-str">"text"</span>],        <span class="hl-key">"cost"</span>: {<span class="hl-key">"input"</span>:<span class="hl-val">0</span>,<span class="hl-key">"output"</span>:<span class="hl-val">0</span>,<span class="hl-key">"cacheRead"</span>:<span class="hl-val">0</span>,<span class="hl-key">"cacheWrite"</span>:<span class="hl-val">0</span>}, <span class="hl-key">"contextWindow"</span>:  <span class="hl-val">262144</span>, <span class="hl-key">"maxTokens"</span>: <span class="hl-val">65536</span> },
+          { <span class="hl-key">"id"</span>: <span class="hl-str">"qwen3-coder-plus"</span>,    <span class="hl-key">"name"</span>: <span class="hl-str">"qwen3-coder-plus"</span>,    <span class="hl-key">"reasoning"</span>: <span class="hl-val">false</span>, <span class="hl-key">"input"</span>: [<span class="hl-str">"text"</span>],        <span class="hl-key">"cost"</span>: {<span class="hl-key">"input"</span>:<span class="hl-val">0</span>,<span class="hl-key">"output"</span>:<span class="hl-val">0</span>,<span class="hl-key">"cacheRead"</span>:<span class="hl-val">0</span>,<span class="hl-key">"cacheWrite"</span>:<span class="hl-val">0</span>}, <span class="hl-key">"contextWindow"</span>: <span class="hl-val">1000000</span>, <span class="hl-key">"maxTokens"</span>: <span class="hl-val">65536</span> },
+          { <span class="hl-key">"id"</span>: <span class="hl-str">"MiniMax-M2.5"</span>,        <span class="hl-key">"name"</span>: <span class="hl-str">"MiniMax-M2.5"</span>,        <span class="hl-key">"reasoning"</span>: <span class="hl-val">false</span>, <span class="hl-key">"input"</span>: [<span class="hl-str">"text"</span>,<span class="hl-str">"image"</span>], <span class="hl-key">"cost"</span>: {<span class="hl-key">"input"</span>:<span class="hl-val">0</span>,<span class="hl-key">"output"</span>:<span class="hl-val">0</span>,<span class="hl-key">"cacheRead"</span>:<span class="hl-val">0</span>,<span class="hl-key">"cacheWrite"</span>:<span class="hl-val">0</span>}, <span class="hl-key">"contextWindow"</span>:  <span class="hl-val">196608</span>, <span class="hl-key">"maxTokens"</span>: <span class="hl-val">32768</span> },
+          { <span class="hl-key">"id"</span>: <span class="hl-str">"glm-5"</span>,              <span class="hl-key">"name"</span>: <span class="hl-str">"glm-5"</span>,              <span class="hl-key">"reasoning"</span>: <span class="hl-val">false</span>, <span class="hl-key">"input"</span>: [<span class="hl-str">"text"</span>],        <span class="hl-key">"cost"</span>: {<span class="hl-key">"input"</span>:<span class="hl-val">0</span>,<span class="hl-key">"output"</span>:<span class="hl-val">0</span>,<span class="hl-key">"cacheRead"</span>:<span class="hl-val">0</span>,<span class="hl-key">"cacheWrite"</span>:<span class="hl-val">0</span>}, <span class="hl-key">"contextWindow"</span>:  <span class="hl-val">202752</span>, <span class="hl-key">"maxTokens"</span>: <span class="hl-val">16384</span>, <span class="hl-key">"compat"</span>: {<span class="hl-key">"thinkingFormat"</span>:<span class="hl-str">"qwen"</span>} },
+          { <span class="hl-key">"id"</span>: <span class="hl-str">"glm-4.7"</span>,            <span class="hl-key">"name"</span>: <span class="hl-str">"glm-4.7"</span>,            <span class="hl-key">"reasoning"</span>: <span class="hl-val">false</span>, <span class="hl-key">"input"</span>: [<span class="hl-str">"text"</span>],        <span class="hl-key">"cost"</span>: {<span class="hl-key">"input"</span>:<span class="hl-val">0</span>,<span class="hl-key">"output"</span>:<span class="hl-val">0</span>,<span class="hl-key">"cacheRead"</span>:<span class="hl-val">0</span>,<span class="hl-key">"cacheWrite"</span>:<span class="hl-val">0</span>}, <span class="hl-key">"contextWindow"</span>:  <span class="hl-val">202752</span>, <span class="hl-key">"maxTokens"</span>: <span class="hl-val">16384</span>, <span class="hl-key">"compat"</span>: {<span class="hl-key">"thinkingFormat"</span>:<span class="hl-str">"qwen"</span>} },
+          { <span class="hl-key">"id"</span>: <span class="hl-str">"kimi-k2.5"</span>,          <span class="hl-key">"name"</span>: <span class="hl-str">"kimi-k2.5"</span>,          <span class="hl-key">"reasoning"</span>: <span class="hl-val">false</span>, <span class="hl-key">"input"</span>: [<span class="hl-str">"text"</span>,<span class="hl-str">"image"</span>], <span class="hl-key">"cost"</span>: {<span class="hl-key">"input"</span>:<span class="hl-val">0</span>,<span class="hl-key">"output"</span>:<span class="hl-val">0</span>,<span class="hl-key">"cacheRead"</span>:<span class="hl-val">0</span>,<span class="hl-key">"cacheWrite"</span>:<span class="hl-val">0</span>}, <span class="hl-key">"contextWindow"</span>:  <span class="hl-val">262144</span>, <span class="hl-key">"maxTokens"</span>: <span class="hl-val">32768</span>, <span class="hl-key">"compat"</span>: {<span class="hl-key">"thinkingFormat"</span>:<span class="hl-str">"qwen"</span>} }
+        ]
+      }
+    }
+  }
+}</pre>
+          </div>
+          <div class="tip"><b>合并说明：</b>若 <code>openclaw.json</code> 已有 <code>models</code> 字段，只需在 <code>providers</code> 对象中追加 <code>"bailian": {...}</code> 块，保留其他 provider 不变。<code>"mode": "merge"</code> 让 openclaw 合并内置模型列表而非替换。</div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-title"><div class="step-num">3</div>配置 agents 默认模型</div>
+          <div class="step-desc">在 <code>agents.defaults</code> 中设置主模型并启用所有 bailian 模型。若 <code>agents.defaults.models</code> 中已有其他条目，追加以下 8 条即可：</div>
+          <div class="code-block">
+            <button class="code-copy" onclick="copyCode(this)">复制</button>
+            <pre>{
+  <span class="hl-key">"agents"</span>: {
+    <span class="hl-key">"defaults"</span>: {
+      <span class="hl-key">"model"</span>: {
+        <span class="hl-key">"primary"</span>: <span class="hl-str">"bailian/qwen3.5-plus"</span>   <span class="hl-comment">// 默认主模型，可按需改</span>
+      },
+      <span class="hl-key">"models"</span>: {
+        <span class="hl-key">"bailian/qwen3.5-plus"</span>:        {},
+        <span class="hl-key">"bailian/qwen3-max-2026-01-23"</span>: {},
+        <span class="hl-key">"bailian/qwen3-coder-next"</span>:    {},
+        <span class="hl-key">"bailian/qwen3-coder-plus"</span>:    {},
+        <span class="hl-key">"bailian/MiniMax-M2.5"</span>:        {},
+        <span class="hl-key">"bailian/glm-5"</span>:               {},
+        <span class="hl-key">"bailian/glm-4.7"</span>:             {},
+        <span class="hl-key">"bailian/kimi-k2.5"</span>:           {}
+      }
+    }
+  }
+}</pre>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-title"><div class="step-num">4</div>重启 gateway 使配置生效</div>
+          <div class="step-desc">保存文件后，在终端执行以下命令重启 openclaw gateway：</div>
+          <div class="code-block">
+            <button class="code-copy" onclick="copyCode(this)">复制</button>
+            <pre><span class="hl-cmd">openclaw</span> gateway restart</pre>
+          </div>
+          <div class="tip">重启后在 openclaw 界面的模型选择框中会出现 <b>bailian/</b> 前缀的模型，表示配置成功。</div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-title"><div class="step-num">5</div>选择模型并使用</div>
+          <div class="step-desc">在 openclaw 模型选择框中，以 <code>bailian/模型名</code> 格式选用以下 8 个模型：</div>
+          <div class="model-grid">
+            <div class="model-tag"><code>bailian/qwen3.5-plus</code><span>通用，1M 上下文</span></div>
+            <div class="model-tag"><code>bailian/qwen3-max-2026-01-23</code><span>复杂推理</span></div>
+            <div class="model-tag"><code>bailian/qwen3-coder-next</code><span>代码专精</span></div>
+            <div class="model-tag"><code>bailian/qwen3-coder-plus</code><span>代码，1M 上下文</span></div>
+            <div class="model-tag"><code>bailian/MiniMax-M2.5</code><span>通用，支持图片</span></div>
+            <div class="model-tag"><code>bailian/glm-5</code><span>通用</span></div>
+            <div class="model-tag"><code>bailian/glm-4.7</code><span>通用</span></div>
+            <div class="model-tag"><code>bailian/kimi-k2.5</code><span>通用，支持图片</span></div>
+          </div>
+        </div>
+
+        <!-- ── 通用 OpenAI 工具分隔 ── -->
+        <div style="display:flex;align-items:center;gap:10px;margin:24px 0 14px">
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+          <span style="font-size:12px;color:var(--t3);white-space:nowrap">其他 OpenAI 兼容工具（Cherry Studio、OpenCode 等）</span>
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-title"><div class="step-num">★</div>通用配置信息</div>
+          <div class="step-desc">在工具的 API 配置页面填入以下两项，模型 ID 直接填模型名（不带 bailian/ 前缀）：</div>
           <div class="code-block">
             <button class="code-copy" onclick="copyCode(this)">复制</button>
             <pre>Base URL:  <span class="hl-val" id="oi-url">https://your-domain.com/v1</span>
 API Key:   <span class="hl-key" id="oi-key">sk-sub-xxxxxxxxxx</span></pre>
           </div>
-          <div class="tip"><b>注意：</b>Base URL 末尾必须带 <code>/v1</code>，否则请求路径会出错。</div>
+          <div class="tip"><b>注意：</b>Base URL 末尾必须带 <code>/v1</code>。</div>
         </div>
 
         <div class="step-card">
-          <div class="step-title"><div class="step-num">2</div>选择模型</div>
-          <div class="step-desc">在工具的模型选择框中输入模型 ID，支持以下 8 个模型：</div>
-          <div class="model-grid">
-            <div class="model-tag"><code>qwen3.5-plus</code><span>通用，超长上下文</span></div>
-            <div class="model-tag"><code>qwen3-max-2026-01-23</code><span>复杂推理</span></div>
-            <div class="model-tag"><code>qwen3-coder-next</code><span>代码专精</span></div>
-            <div class="model-tag"><code>qwen3-coder-plus</code><span>代码专精，长上下文</span></div>
-            <div class="model-tag"><code>MiniMax-M2.5</code><span>通用</span></div>
-            <div class="model-tag"><code>glm-5</code><span>通用</span></div>
-            <div class="model-tag"><code>glm-4.7</code><span>通用</span></div>
-            <div class="model-tag"><code>kimi-k2.5</code><span>通用</span></div>
-          </div>
-        </div>
-
-        <div class="step-card">
-          <div class="step-title"><div class="step-num">3</div>验证连接（curl 测试）</div>
+          <div class="step-title"><div class="step-num">★</div>验证连接（curl 测试）</div>
           <div class="step-desc">在终端运行以下命令，若返回正常回复则接入成功：</div>
           <div class="code-block">
             <button class="code-copy" onclick="copyCode(this)">复制</button>
@@ -278,8 +368,8 @@ API Key:   <span class="hl-key" id="oi-key">sk-sub-xxxxxxxxxx</span></pre>
         </div>
 
         <div class="step-card">
-          <div class="step-title"><div class="step-num">4</div>查看用量</div>
-          <div class="step-desc">OpenAI 协议和 Anthropic 协议共用同一套配额。使用以下命令查看实时用量：</div>
+          <div class="step-title"><div class="step-num">★</div>查看用量</div>
+          <div class="step-desc">OpenAI 协议和 Anthropic 协议共用同一套配额：</div>
           <div class="code-block">
             <button class="code-copy" onclick="copyCode(this)">复制</button>
             <pre><span class="hl-cmd">curl</span> <span class="hl-val" id="oi-usage-url">https://your-domain.com</span>/_usage \
@@ -456,7 +546,9 @@ function fillTutorial(){
   // 自动填入用户的 key 和当前域名
   const ids={
     'oi-key':myKey,'oi-curl-key':myKey,'oi-usage-key':myKey,'cc-token':myKey,
-    'oi-url':BASE_URL+'/v1','oi-curl-url':BASE_URL,'oi-usage-url':BASE_URL,'cc-base-url':BASE_URL
+    'oc-json-key':myKey,
+    'oi-url':BASE_URL+'/v1','oi-curl-url':BASE_URL,'oi-usage-url':BASE_URL,'cc-base-url':BASE_URL,
+    'oc-json-url':BASE_URL+'/v1'
   };
   for(const[id,val]of Object.entries(ids)){
     const el=document.getElementById(id); if(el) el.textContent=val;
