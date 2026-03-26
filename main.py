@@ -61,8 +61,18 @@ PLAN_MODELS: set[str] = {
     "kimi-k2.5",
 }
 
-# Anthropic 协议与 OpenAI 协议共用同一套白名单
-# 用户在 Claude Code settings.json 中通过 ANTHROPIC_MODEL 直接设置 DashScope 模型名（如 qwen3.5-plus）
+# Anthropic 协议 claude-* → DashScope 模型名映射
+# Claude Code 客户端校验模型名必须是 claude-* 格式，代理负责替换
+CLAUDE_MODEL_MAP: dict[str, str] = {
+    "claude-3-5-sonnet-20241022":   "qwen3.5-plus",
+    "claude-3-7-sonnet-20250219":   "qwen3.5-plus",
+    "claude-sonnet-4-5":            "qwen3.5-plus",
+    "claude-3-5-haiku-20241022":    "qwen3-coder-plus",
+    "claude-3-haiku-20240307":      "qwen3-coder-plus",
+    "claude-opus-4-5":              "qwen3-max-2026-01-23",
+    "claude-3-opus-20240229":       "qwen3-max-2026-01-23",
+}
+CLAUDE_DEFAULT_MODEL = "qwen3.5-plus"  # 未匹配 claude-* 的回落值
 
 # ─────────────────────────────────────────
 #  上游地址 & 认证
@@ -471,13 +481,25 @@ async def _handle_anthropic(request: Request, path: str, secret: str):
 
     body = await request.body()
 
-    # ── 检查模型是否在 Plan 白名单内 ──
+    # ── 模型名处理：claude-* 重映射为 DashScope 模型名 ──
+    # Claude Code 校验请求和响应里的模型名，两端都需要替换
+    original_model = None   # 保存原始 claude-* 名称，用于替换响应
     in_plan = True
     if body:
         try:
-            model = json.loads(body).get("model", "")
-            if model and model not in PLAN_MODELS:
-                in_plan = False
+            req_json = json.loads(body)
+            model = req_json.get("model", "")
+            if model:
+                if model in CLAUDE_MODEL_MAP:
+                    original_model = model
+                    req_json["model"] = CLAUDE_MODEL_MAP[model]
+                    body = json.dumps(req_json).encode()
+                elif model.startswith("claude-"):
+                    original_model = model
+                    req_json["model"] = CLAUDE_DEFAULT_MODEL
+                    body = json.dumps(req_json).encode()
+                elif model not in PLAN_MODELS:
+                    in_plan = False
         except Exception:
             pass
 
@@ -491,18 +513,23 @@ async def _handle_anthropic(request: Request, path: str, secret: str):
     upstream_headers["x-api-key"] = ALIYUN_KEY
 
     if not in_plan:
-        return await _forward(request, upstream_url, upstream_headers, body, quota_keys=None)
+        return await _forward(request, upstream_url, upstream_headers, body,
+                              quota_keys=None, restore_model=None)
 
     quota_keys = await _check_and_deduct_quota(kid, meta)
-    return await _forward(request, upstream_url, upstream_headers, body, quota_keys=quota_keys)
+    return await _forward(request, upstream_url, upstream_headers, body,
+                          quota_keys=quota_keys, restore_model=original_model)
 
 
 async def _forward(request: Request, upstream_url: str,
                    headers: dict, body: bytes,
-                   quota_keys: tuple | None):
+                   quota_keys: tuple | None,
+                   restore_model: str | None = None):
     """
     透传请求到上游，自动处理流式/非流式。
-    quota_keys: 若上游失败需要回滚的 Redis key 三元组，None 表示不回滚。
+    quota_keys:    若上游失败需要回滚的 Redis key 三元组，None 表示不回滚。
+    restore_model: 原始 claude-* 模型名，用于将响应体中的 DashScope 模型名替换回去，
+                   让 Claude Code 的响应模型名校验通过。
     """
     is_stream = False
     if body:
@@ -528,7 +555,19 @@ async def _forward(request: Request, upstream_url: str,
                         if upstream.status_code >= 500 and quota_keys:
                             await rdb.eval(LUA_ROLLBACK, 3, *quota_keys)
                             rollback_done = True
+                        first_chunk = True
                         async for chunk in upstream.aiter_bytes():
+                            # 流式第一个 chunk 包含 message_start 事件，替换模型名
+                            if restore_model and first_chunk:
+                                first_chunk = False
+                                try:
+                                    actual = json.loads(body).get("model", "")
+                                    chunk = chunk.replace(
+                                        f'"model":"{actual}"'.encode(),
+                                        f'"model":"{restore_model}"'.encode(),
+                                    )
+                                except Exception:
+                                    pass
                             yield chunk
             except Exception:
                 if quota_keys and not rollback_done:
@@ -558,7 +597,19 @@ async def _forward(request: Request, upstream_url: str,
     if upstream.status_code >= 500 and quota_keys:
         await rdb.eval(LUA_ROLLBACK, 3, *quota_keys)
 
+    content = upstream.content
+    # 将响应体里的 DashScope 模型名替换回原始 claude-* 名称
+    if restore_model and content:
+        try:
+            resp_json = json.loads(content)
+            actual = resp_json.get("model", "")
+            if actual and actual != restore_model:
+                resp_json["model"] = restore_model
+                content = json.dumps(resp_json).encode()
+        except Exception:
+            pass
+
     resp_headers = {k: v for k, v in upstream.headers.items() if k.lower() not in skip}
-    return Response(content=upstream.content,
+    return Response(content=content,
                     status_code=upstream.status_code,
                     headers=resp_headers)
