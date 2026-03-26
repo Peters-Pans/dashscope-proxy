@@ -61,13 +61,7 @@ PLAN_MODELS: set[str] = {
     "kimi-k2.5",
 }
 
-# Anthropic 协议白名单：/apps/anthropic 端点仅支持 Qwen 系列，第三方模型不可用
-ANTHROPIC_PLAN_MODELS: set[str] = {
-    "qwen3.5-plus",
-    "qwen3-max-2026-01-23",
-    "qwen3-coder-next",
-    "qwen3-coder-plus",
-}
+# Anthropic 协议与 OpenAI 协议共用同一套白名单
 
 # ─────────────────────────────────────────
 #  上游地址 & 认证
@@ -476,12 +470,12 @@ async def _handle_anthropic(request: Request, path: str, secret: str):
 
     body = await request.body()
 
-    # ── 检查模型是否在 Anthropic Plan 白名单内 ──
+    # ── 检查模型是否在 Plan 白名单内（与 OpenAI 协议共用）──
     in_plan = True
     if body:
         try:
             model = json.loads(body).get("model", "")
-            if model and model not in ANTHROPIC_PLAN_MODELS:
+            if model and model not in PLAN_MODELS:
                 in_plan = False
         except Exception:
             pass
