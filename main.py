@@ -4,13 +4,14 @@
 支持 OpenAI 协议（兼容 OpenAI 工具）和 Anthropic 协议（Claude Code）
 """
 
-import os, uuid, time, json, secrets, string, calendar
+import os, time, json, secrets, string
 import datetime
 
 import httpx
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from starlette.responses import StreamingResponse
 from redis.asyncio import Redis
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -22,34 +23,27 @@ DEFAULT_LIMITS = {"5h": 1_500, "week": 11_250, "month": 22_500}
 # ─────────────────────────────────────────
 #  Pydantic 校验模型
 # ─────────────────────────────────────────
-class LimitsUpdate(BaseModel):
-    """配额限制更新"""
+class _QuotaFields(BaseModel):
+    """month / week / 5h 三维度配额字段，LimitsUpdate 和 UsageUpdate 共用。"""
     model_config = ConfigDict(populate_by_name=True)
+    month:     int | None = Field(None, ge=0, le=1_000_000_000, description="月")
+    week:      int | None = Field(None, ge=0, le=500_000_000,   description="周")
+    five_hour: int | None = Field(None, alias="5h", ge=0, le=100_000_000, description="5小时")
 
-    month: int | None = Field(None, ge=0, le=1_000_000_000, description="月限额")
-    week: int | None = Field(None, ge=0, le=500_000_000, description="周限额")
-    five_hour: int | None = Field(None, alias="5h", ge=0, le=100_000_000, description="5小时限额")
+class LimitsUpdate(_QuotaFields):
+    """配额限制更新"""
 
+class UsageUpdate(_QuotaFields):
+    """用量更新"""
 
 class LabelUpdate(BaseModel):
     """用户标签更新"""
-    label: str = Field(..., max_length=100, description="用户名称")
-    note: str = Field("", max_length=1000, description="备注")
-
-
-class UsageUpdate(BaseModel):
-    """用量更新"""
-    model_config = ConfigDict(populate_by_name=True)
-
-    month: int | None = Field(None, ge=0, le=1_000_000_000, description="月用量")
-    week: int | None = Field(None, ge=0, le=500_000_000, description="周用量")
-    five_hour: int | None = Field(None, alias="5h", ge=0, le=100_000_000, description="5小时用量")
+    label: str = Field(..., max_length=100,  description="用户名称")
+    note:  str = Field("",  max_length=1000, description="备注")
 
 # ─────────────────────────────────────────
 #  Coding Plan 模型白名单
 # ─────────────────────────────────────────
-
-# OpenAI 协议白名单：调用这些模型才计入配额，其他模型直接透传不扣额
 PLAN_MODELS: set[str] = {
     "qwen3.5-plus",
     "qwen3-max-2026-01-23",
@@ -64,9 +58,9 @@ PLAN_MODELS: set[str] = {
 # ─────────────────────────────────────────
 #  上游地址 & 认证
 # ─────────────────────────────────────────
-ALIYUN_BASE      = os.getenv("ALIYUN_BASE_URL",      "https://coding.dashscope.aliyuncs.com/v1")
-ANTHROPIC_BASE   = os.getenv("ANTHROPIC_BASE",        "https://coding.dashscope.aliyuncs.com/apps/anthropic")
-ALIYUN_KEY       = os.getenv("ALIYUN_API_KEY",        "")
+ALIYUN_BASE    = os.getenv("ALIYUN_BASE_URL", "https://coding.dashscope.aliyuncs.com/v1")
+ANTHROPIC_BASE = os.getenv("ANTHROPIC_BASE",  "https://coding.dashscope.aliyuncs.com/apps/anthropic")
+ALIYUN_KEY     = os.getenv("ALIYUN_API_KEY",  "")
 
 _admin_token_raw = os.getenv("ADMIN_TOKEN", "change-me")
 if _admin_token_raw == "change-me":
@@ -76,12 +70,10 @@ ADMIN_TOKEN = _admin_token_raw
 # ─────────────────────────────────────────
 #  固定周期 Key 计算
 # ─────────────────────────────────────────
-
 def period_info(kid: str) -> dict:
     """返回当前周期的 Redis key、TTL（EXPIREAT时间戳）、重置时刻"""
     now = datetime.datetime.now()
 
-    # ── 5小时块：00-04, 05-09, 10-14, 15-19, 20-23 ──
     slot = now.hour // 5
     date_s = now.strftime("%Y%m%d")
     next_slot_hour = (slot + 1) * 5
@@ -92,13 +84,11 @@ def period_info(kid: str) -> dict:
         next_reset_5h = now.replace(
             hour=next_slot_hour, minute=0, second=0, microsecond=0)
 
-    # ── 自然周：下周一 00:00 ──
-    days_to_monday = 7 - now.weekday()  # weekday(): Mon=0 … Sun=6
+    days_to_monday = 7 - now.weekday()
     next_monday = (now + datetime.timedelta(days=days_to_monday)).replace(
         hour=0, minute=0, second=0, microsecond=0)
     iso = now.isocalendar()
 
-    # ── 自然月：下月1号 00:00 ──
     if now.month == 12:
         next_month_dt = datetime.datetime(now.year + 1, 1, 1)
     else:
@@ -128,7 +118,6 @@ def period_info(kid: str) -> dict:
 # ─────────────────────────────────────────
 #  Lua
 # ─────────────────────────────────────────
-
 LUA_CHECK = """
 local k5h  = KEYS[1]; local kw  = KEYS[2]; local km  = KEYS[3]
 local l5h  = tonumber(ARGV[1]); local lw = tonumber(ARGV[2]); local lm = tonumber(ARGV[3])
@@ -164,33 +153,41 @@ return 'OK'
 # ─────────────────────────────────────────
 app = FastAPI(title="DashScope Proxy", docs_url=None, redoc_url=None)
 rdb: Redis = None
+_http_client: httpx.AsyncClient = None  # 全局复用，避免每次请求重建 TCP/TLS 连接
 
 
 @app.on_event("startup")
 async def startup():
-    global rdb
+    global rdb, _http_client
     rdb = Redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"), decode_responses=True)
+    _http_client = httpx.AsyncClient(timeout=None)
     for i in range(1, 5):
         kid = f"k{i}"
-        if not await rdb.exists(f"key:meta:{kid}"):
-            secret = os.getenv(f"KEY_{i}", "sk-sub-" + "".join(
-                secrets.choice(string.ascii_lowercase + string.digits) for _ in range(16)))
-            meta = {
-                "kid": kid, "label": f"用户{i}", "secret": secret,
-                "enabled": True, "limits": {"5h": None, "week": None, "month": None},
-                "note": "", "created_at": int(time.time()),
-            }
-            await rdb.set(f"key:meta:{kid}", json.dumps(meta, ensure_ascii=False))
+        secret = os.getenv(f"KEY_{i}", "sk-sub-" + "".join(
+            secrets.choice(string.ascii_lowercase + string.digits) for _ in range(16)))
+        meta = {
+            "kid": kid, "label": f"用户{i}", "secret": secret,
+            "enabled": True, "limits": {"5h": None, "week": None, "month": None},
+            "note": "", "created_at": int(time.time()),
+        }
+        # nx=True：已存在则跳过，避免覆盖现有数据（防止重启时多实例竞争写入）
+        await rdb.set(f"key:meta:{kid}", json.dumps(meta, ensure_ascii=False), nx=True)
     await _rebuild_secret_map()
 
 
+@app.on_event("shutdown")
+async def shutdown():
+    if _http_client:
+        await _http_client.aclose()
+
+
 async def _rebuild_secret_map():
-    mapping = {}
+    """从所有 key:meta:k{i} 重建 secret→kid 映射表。仅在 Key secret 变更时调用。"""
+    pipe = rdb.pipeline()
     for i in range(1, 5):
-        raw = await rdb.get(f"key:meta:k{i}")
-        if raw:
-            m = json.loads(raw)
-            mapping[m["secret"]] = m["kid"]
+        pipe.get(f"key:meta:k{i}")
+    raws = await pipe.execute()
+    mapping = {json.loads(r)["secret"]: json.loads(r)["kid"] for r in raws if r}
     if mapping:
         await rdb.delete("map:secret")
         await rdb.hset("map:secret", mapping=mapping)
@@ -201,9 +198,11 @@ async def _get_meta(kid: str) -> dict | None:
     return json.loads(raw) if raw else None
 
 
-async def _save_meta(meta: dict):
+async def _save_meta(meta: dict, rebuild_map: bool = False):
+    """保存 meta。仅 secret 变更（regenerate）时需要 rebuild_map=True。"""
     await rdb.set(f"key:meta:{meta['kid']}", json.dumps(meta, ensure_ascii=False))
-    await _rebuild_secret_map()
+    if rebuild_map:
+        await _rebuild_secret_map()
 
 
 def _limits(meta: dict) -> dict:
@@ -212,11 +211,24 @@ def _limits(meta: dict) -> dict:
 
 async def _usage(kid: str) -> dict:
     pi = period_info(kid)
-    result = {}
-    for dim in ("5h", "week", "month"):
-        val = await rdb.get(pi[dim]["key"])
-        result[dim] = int(val) if val else 0
-    return result
+    vals = await rdb.mget(pi["5h"]["key"], pi["week"]["key"], pi["month"]["key"])
+    return {
+        "5h":    int(vals[0]) if vals[0] else 0,
+        "week":  int(vals[1]) if vals[1] else 0,
+        "month": int(vals[2]) if vals[2] else 0,
+    }
+
+
+def _is_plan_model(body: bytes) -> bool:
+    """请求体中的模型在 Coding Plan 白名单内则返回 True（需计入配额）。
+    无法解析或未指定模型时默认返回 True。"""
+    if not body:
+        return True
+    try:
+        model = json.loads(body).get("model", "")
+        return not model or model in PLAN_MODELS
+    except Exception:
+        return True
 
 
 # ─────────────────────────────────────────
@@ -240,7 +252,7 @@ def _check_admin(request: Request):
 
 
 def _mask_secret(secret: str) -> str:
-    """脱敏显示 secret：sk-sub-****xxxx（保留前缀和后4位）"""
+    """脱敏显示 secret：保留前缀和后4位"""
     if len(secret) <= 8:
         return "****"
     return f"{secret[:7]}****{secret[-4:]}"
@@ -249,16 +261,33 @@ def _mask_secret(secret: str) -> str:
 @app.get("/_admin/keys")
 async def admin_list_keys(request: Request):
     _check_admin(request)
-    result = []
+
+    # 两轮 pipeline：先拉全部 meta，再批量拉 usage 计数器
+    pipe = rdb.pipeline()
     for i in range(1, 5):
-        meta = await _get_meta(f"k{i}")
-        if not meta: continue
+        pipe.get(f"key:meta:k{i}")
+    metas = [json.loads(r) for r in await pipe.execute() if r]
+
+    period_infos = [period_info(m["kid"]) for m in metas]
+    pipe = rdb.pipeline()
+    for pi in period_infos:
+        for dim in ("5h", "week", "month"):
+            pipe.get(pi[dim]["key"])
+    usage_vals = await pipe.execute()
+
+    result = []
+    for idx, meta in enumerate(metas):
+        pi   = period_infos[idx]
         lims = _limits(meta)
-        used = await _usage(meta["kid"])
-        pi   = period_info(meta["kid"])
+        base = idx * 3
+        used = {
+            "5h":    int(usage_vals[base])   if usage_vals[base]   else 0,
+            "week":  int(usage_vals[base+1]) if usage_vals[base+1] else 0,
+            "month": int(usage_vals[base+2]) if usage_vals[base+2] else 0,
+        }
         result.append({
-            **{k: v for k, v in meta.items() if k != "secret"},  # 排除完整 secret
-            "secret_preview": _mask_secret(meta["secret"]),      # 返回脱敏版本
+            **{k: v for k, v in meta.items() if k != "secret"},
+            "secret_preview": _mask_secret(meta["secret"]),
             "limits_effective": lims,
             "usage": used,
             "pct":   {k: round(used[k] / lims[k] * 100, 1) for k in lims},
@@ -284,7 +313,7 @@ async def admin_regenerate(kid: str, request: Request):
     if not meta: raise HTTPException(404)
     meta["secret"] = "sk-sub-" + "".join(
         secrets.choice(string.ascii_lowercase + string.digits) for _ in range(24))
-    await _save_meta(meta)
+    await _save_meta(meta, rebuild_map=True)  # secret 变了，必须重建映射
     return {"kid": kid, "secret": meta["secret"]}
 
 
@@ -302,13 +331,9 @@ async def admin_set_limits(kid: str, body: LimitsUpdate, request: Request):
     _check_admin(request)
     meta = await _get_meta(kid)
     if not meta: raise HTTPException(404)
-    # 使用 Pydantic 模型的字段名映射
-    if body.month is not None:
-        meta["limits"]["month"] = body.month
-    if body.week is not None:
-        meta["limits"]["week"] = body.week
-    if body.five_hour is not None:
-        meta["limits"]["5h"] = body.five_hour
+    if body.month     is not None: meta["limits"]["month"] = body.month
+    if body.week      is not None: meta["limits"]["week"]  = body.week
+    if body.five_hour is not None: meta["limits"]["5h"]    = body.five_hour
     await _save_meta(meta)
     return {"kid": kid, "limits": meta["limits"], "effective": _limits(meta)}
 
@@ -319,7 +344,7 @@ async def admin_set_label(kid: str, body: LabelUpdate, request: Request):
     meta = await _get_meta(kid)
     if not meta: raise HTTPException(404)
     meta["label"] = body.label
-    meta["note"] = body.note
+    meta["note"]  = body.note
     await _save_meta(meta)
     return {"kid": kid, "label": meta["label"], "note": meta["note"]}
 
@@ -330,16 +355,18 @@ async def admin_set_usage(kid: str, body: UsageUpdate, request: Request):
     _check_admin(request)
     meta = await _get_meta(kid)
     if not meta: raise HTTPException(404)
-    pi = period_info(kid)
-    if body.month is not None:
-        await rdb.set(pi["month"]["key"], body.month)
-        await rdb.expireat(pi["month"]["key"], pi["month"]["expire_at"])
-    if body.week is not None:
-        await rdb.set(pi["week"]["key"], body.week)
-        await rdb.expireat(pi["week"]["key"], pi["week"]["expire_at"])
+    pi   = period_info(kid)
+    pipe = rdb.pipeline()
+    if body.month     is not None:
+        pipe.set(pi["month"]["key"], body.month)
+        pipe.expireat(pi["month"]["key"], pi["month"]["expire_at"])
+    if body.week      is not None:
+        pipe.set(pi["week"]["key"], body.week)
+        pipe.expireat(pi["week"]["key"], pi["week"]["expire_at"])
     if body.five_hour is not None:
-        await rdb.set(pi["5h"]["key"], body.five_hour)
-        await rdb.expireat(pi["5h"]["key"], pi["5h"]["expire_at"])
+        pipe.set(pi["5h"]["key"], body.five_hour)
+        pipe.expireat(pi["5h"]["key"], pi["5h"]["expire_at"])
+    await pipe.execute()
     return {"kid": kid, "usage": await _usage(kid)}
 
 
@@ -349,8 +376,7 @@ async def admin_reset_usage(kid: str, request: Request):
     meta = await _get_meta(kid)
     if not meta: raise HTTPException(404)
     pi = period_info(kid)
-    for dim in ("5h", "week", "month"):
-        await rdb.delete(pi[dim]["key"])
+    await rdb.delete(pi["5h"]["key"], pi["week"]["key"], pi["month"]["key"])
     return {"kid": kid, "reset": True}
 
 
@@ -373,8 +399,8 @@ async def user_usage(request: Request):
         "enabled": meta["enabled"],
         "limits": lims, "usage": used,
         "pct":    {k: round(used[k] / lims[k] * 100, 1) for k in lims},
-        "reset_at": {k: pi[k]["reset_at"] for k in pi},
-        "period_label": {k: pi[k]["label"] for k in pi},
+        "reset_at":     {k: pi[k]["reset_at"] for k in pi},
+        "period_label": {k: pi[k]["label"]    for k in pi},
         "updated_at": int(time.time()),
     }
 
@@ -383,7 +409,7 @@ async def user_usage(request: Request):
 #  配额检查公共逻辑
 # ─────────────────────────────────────────
 async def _check_and_deduct_quota(kid: str, meta: dict) -> tuple:
-    """检查并扣除配额，返回 (k5h, kw, km) 用于回滚。配额不足时抛出 HTTPException。"""
+    """原子检查并扣除三维配额，返回 (k5h, kw, km) 供回滚用。不足则抛 429。"""
     lims = _limits(meta)
     pi   = period_info(kid)
     k5h, kw, km = pi["5h"]["key"], pi["week"]["key"], pi["month"]["key"]
@@ -407,19 +433,13 @@ async def _check_and_deduct_quota(kid: str, meta: dict) -> tuple:
 # ─────────────────────────────────────────
 #  主代理
 # ─────────────────────────────────────────
-from starlette.responses import StreamingResponse
-
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def proxy(path: str, request: Request):
-    # ── 协议检测 ──
-    # 路径 v1/messages 是 Anthropic 专属端点，无论 auth 格式都走 Anthropic handler
-    # 路径 v1/chat/completions 是 OpenAI 端点
-    # x-api-key 存在时也视为 Anthropic
     x_api_key   = request.headers.get("x-api-key", "").strip()
     auth_header = request.headers.get("Authorization", "")
 
     is_anthropic_path = (path == "v1/messages" or path.startswith("v1/messages?")
-                         or path == "messages" or path.startswith("messages?"))
+                         or path == "messages"  or path.startswith("messages?"))
 
     if x_api_key:
         secret = x_api_key
@@ -428,14 +448,12 @@ async def proxy(path: str, request: Request):
     else:
         raise HTTPException(401, "Missing Authorization header")
 
-    if x_api_key or is_anthropic_path:
-        return await _handle_anthropic(request, path, secret)
-    else:
-        return await _handle_openai(request, path, secret)
+    protocol = "anthropic" if (x_api_key or is_anthropic_path) else "openai"
+    return await _handle_proxy(request, path, secret, protocol)
 
 
-async def _handle_openai(request: Request, path: str, secret: str):
-    """处理 OpenAI 协议请求，转发到 DashScope OpenAI 兼容端点。"""
+async def _handle_proxy(request: Request, path: str, secret: str, protocol: str):
+    """统一代理处理：验证 Key → 检查配额 → 转发上游。"""
     kid = await rdb.hget("map:secret", secret)
     if not kid: raise HTTPException(401, "Invalid API key")
     meta = await _get_meta(kid)
@@ -443,72 +461,28 @@ async def _handle_openai(request: Request, path: str, secret: str):
 
     body = await request.body()
 
-    # ── 检查模型是否在 OpenAI Plan 白名单内 ──
-    in_plan = True
-    if body:
-        try:
-            model = json.loads(body).get("model", "")
-            if model and model not in PLAN_MODELS:
-                in_plan = False
-        except Exception:
-            pass  # 非 JSON 请求直接放行
+    if protocol == "openai":
+        upstream_path = path[3:] if path.startswith("v1/") else path
+        upstream_url  = f"{ALIYUN_BASE}/{upstream_path}"
+        strip         = {"host", "authorization", "content-length",
+                         "transfer-encoding", "connection", "keep-alive"}
+        upstream_headers = {k: v for k, v in request.headers.items() if k.lower() not in strip}
+        upstream_headers["Authorization"] = f"Bearer {ALIYUN_KEY}"
+    else:  # anthropic
+        upstream_url  = f"{ANTHROPIC_BASE}/{path}"
+        strip         = {"host", "x-api-key", "authorization", "content-length",
+                         "transfer-encoding", "connection", "keep-alive"}
+        upstream_headers = {k: v for k, v in request.headers.items() if k.lower() not in strip}
+        upstream_headers["x-api-key"] = ALIYUN_KEY
 
-    # 去掉 path 开头的 v1/（ALIYUN_BASE 已包含 /v1）
-    upstream_path = path[3:] if path.startswith("v1/") else path
-    upstream_url  = f"{ALIYUN_BASE}/{upstream_path}"
-
-    upstream_headers = {k: v for k, v in request.headers.items()
-                        if k.lower() not in ("host", "authorization", "content-length",
-                                             "transfer-encoding", "connection", "keep-alive")}
-    upstream_headers["Authorization"] = f"Bearer {ALIYUN_KEY}"
-
-    if not in_plan:
-        return await _forward(request, upstream_url, upstream_headers, body, quota_keys=None)
-
-    quota_keys = await _check_and_deduct_quota(kid, meta)
-    return await _forward(request, upstream_url, upstream_headers, body, quota_keys=quota_keys)
-
-
-async def _handle_anthropic(request: Request, path: str, secret: str):
-    """处理 Anthropic 协议请求，转发到 DashScope Anthropic 兼容端点。"""
-    kid = await rdb.hget("map:secret", secret)
-    if not kid: raise HTTPException(401, "Invalid API key")
-    meta = await _get_meta(kid)
-    if not meta or not meta["enabled"]: raise HTTPException(403, "Key is disabled")
-
-    body = await request.body()
-
-    # ── 检查模型是否在 Plan 白名单内 ──
-    in_plan = True
-    if body:
-        try:
-            model = json.loads(body).get("model", "")
-            if model and model not in PLAN_MODELS:
-                in_plan = False
-        except Exception:
-            pass
-
-    # Anthropic 协议：path 保持原样（ANTHROPIC_BASE 不含 /v1）
-    upstream_url = f"{ANTHROPIC_BASE}/{path}"
-
-    # 构造上游请求头：移除客户端认证头，注入真实阿里云 Key
-    upstream_headers = {k: v for k, v in request.headers.items()
-                        if k.lower() not in ("host", "x-api-key", "authorization",
-                                             "content-length", "transfer-encoding",
-                                             "connection", "keep-alive")}
-    upstream_headers["x-api-key"] = ALIYUN_KEY
-
-    if not in_plan:
-        return await _forward(request, upstream_url, upstream_headers, body, quota_keys=None)
-
-    quota_keys = await _check_and_deduct_quota(kid, meta)
-    return await _forward(request, upstream_url, upstream_headers, body, quota_keys=quota_keys)
+    quota_keys = await _check_and_deduct_quota(kid, meta) if _is_plan_model(body) else None
+    return await _forward(request, upstream_url, upstream_headers, body, quota_keys)
 
 
 async def _forward(request: Request, upstream_url: str,
                    headers: dict, body: bytes,
                    quota_keys: tuple | None):
-    """透传请求到上游，自动处理流式/非流式。quota_keys 为 None 时不回滚配额。"""
+    """透传到上游，自动处理流式/非流式。quota_keys 为 None 时不回滚配额。"""
     is_stream = False
     if body:
         try:
@@ -518,23 +492,20 @@ async def _forward(request: Request, upstream_url: str,
 
     skip = {"transfer-encoding", "connection", "keep-alive", "content-length"}
 
-    # ── 流式透传 ─────────────────────────────────
     if is_stream:
         async def event_stream():
             rollback_done = False
             try:
-                async with httpx.AsyncClient(timeout=None) as client:
-                    async with client.stream(
-                        method=request.method,
-                        url=upstream_url,
-                        headers=headers, content=body,
-                        params=dict(request.query_params),
-                    ) as upstream:
-                        if upstream.status_code >= 500 and quota_keys:
-                            await rdb.eval(LUA_ROLLBACK, 3, *quota_keys)
-                            rollback_done = True
-                        async for chunk in upstream.aiter_bytes():
-                            yield chunk
+                async with _http_client.stream(
+                    method=request.method, url=upstream_url,
+                    headers=headers, content=body,
+                    params=dict(request.query_params),
+                ) as upstream:
+                    if upstream.status_code >= 500 and quota_keys:
+                        await rdb.eval(LUA_ROLLBACK, 3, *quota_keys)
+                        rollback_done = True
+                    async for chunk in upstream.aiter_bytes():
+                        yield chunk
             except Exception:
                 if quota_keys and not rollback_done:
                     await rdb.eval(LUA_ROLLBACK, 3, *quota_keys)
@@ -546,15 +517,13 @@ async def _forward(request: Request, upstream_url: str,
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
-    # ── 非流式：一次性返回 ────────────────────────
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            upstream = await client.request(
-                method=request.method,
-                url=upstream_url,
-                headers=headers, content=body,
-                params=dict(request.query_params),
-            )
+        upstream = await _http_client.request(
+            method=request.method, url=upstream_url,
+            headers=headers, content=body,
+            params=dict(request.query_params),
+            timeout=120.0,
+        )
     except Exception as e:
         if quota_keys:
             await rdb.eval(LUA_ROLLBACK, 3, *quota_keys)
