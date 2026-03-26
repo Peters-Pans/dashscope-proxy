@@ -4,7 +4,7 @@
 支持 OpenAI 协议（兼容 OpenAI 工具）和 Anthropic 协议（Claude Code）
 """
 
-import os, uuid, time, json, secrets, string, calendar
+import os, uuid, time, json, secrets, string, calendar, re
 import datetime
 
 import httpx
@@ -538,12 +538,27 @@ async def _forward(request: Request, upstream_url: str,
         except Exception:
             pass
 
+    # 预编译模型名替换 pattern（处理 JSON 中可能有空格的情况）
+    restore_pattern = None
+    restore_replacement = None
+    if restore_model and body:
+        try:
+            actual_model = json.loads(body).get("model", "")
+            if actual_model and actual_model != restore_model:
+                restore_pattern = re.compile(
+                    ('"model"\\s*:\\s*"' + re.escape(actual_model) + '"').encode()
+                )
+                restore_replacement = f'"model":"{restore_model}"'.encode()
+        except Exception:
+            pass
+
     skip = {"transfer-encoding", "connection", "keep-alive", "content-length"}
 
     # ── 流式透传 ─────────────────────────────────
     if is_stream:
         async def event_stream():
             rollback_done = False
+            model_restored = False
             try:
                 async with httpx.AsyncClient(timeout=None) as client:
                     async with client.stream(
@@ -555,19 +570,13 @@ async def _forward(request: Request, upstream_url: str,
                         if upstream.status_code >= 500 and quota_keys:
                             await rdb.eval(LUA_ROLLBACK, 3, *quota_keys)
                             rollback_done = True
-                        first_chunk = True
                         async for chunk in upstream.aiter_bytes():
-                            # 流式第一个 chunk 包含 message_start 事件，替换模型名
-                            if restore_model and first_chunk:
-                                first_chunk = False
-                                try:
-                                    actual = json.loads(body).get("model", "")
-                                    chunk = chunk.replace(
-                                        f'"model":"{actual}"'.encode(),
-                                        f'"model":"{restore_model}"'.encode(),
-                                    )
-                                except Exception:
-                                    pass
+                            # 替换响应中的 DashScope 模型名为原始 claude-* 名称
+                            if restore_pattern and not model_restored:
+                                new_chunk = restore_pattern.sub(restore_replacement, chunk)
+                                if new_chunk != chunk:
+                                    model_restored = True
+                                chunk = new_chunk
                             yield chunk
             except Exception:
                 if quota_keys and not rollback_done:
@@ -599,15 +608,8 @@ async def _forward(request: Request, upstream_url: str,
 
     content = upstream.content
     # 将响应体里的 DashScope 模型名替换回原始 claude-* 名称
-    if restore_model and content:
-        try:
-            resp_json = json.loads(content)
-            actual = resp_json.get("model", "")
-            if actual and actual != restore_model:
-                resp_json["model"] = restore_model
-                content = json.dumps(resp_json).encode()
-        except Exception:
-            pass
+    if restore_pattern and content:
+        content = restore_pattern.sub(restore_replacement, content)
 
     resp_headers = {k: v for k, v in upstream.headers.items() if k.lower() not in skip}
     return Response(content=content,
