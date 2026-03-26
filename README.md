@@ -16,35 +16,18 @@
 
 ## 支持的模型
 
-### OpenAI 协议（openclaw 等）
+以下 8 个模型计入配额，其他模型直接透传不扣额：
 
-白名单内的模型计入配额，其他模型直接透传不计费：
-
-```
-qwen3.5-plus
-qwen3-max-2026-01-23
-qwen3-coder-next
-qwen3-coder-plus
-MiniMax-M2.5
-glm-5
-glm-4.7
-kimi-k2.5
-```
-
-### Anthropic 协议（Claude Code）
-
-与 OpenAI 协议共用同一套模型白名单，所有 Coding Plan 模型均可用：
-
-```
-qwen3.5-plus
-qwen3-max-2026-01-23
-qwen3-coder-next
-qwen3-coder-plus
-MiniMax-M2.5
-glm-5
-glm-4.7
-kimi-k2.5
-```
+| 模型 | 适用场景 |
+|------|----------|
+| `qwen3.5-plus` | 通用编程，超长上下文（1M） |
+| `qwen3-max-2026-01-23` | 复杂推理 |
+| `qwen3-coder-next` | 代码专精 |
+| `qwen3-coder-plus` | 代码专精，超长上下文（1M） |
+| `MiniMax-M2.5` | 通用 |
+| `glm-5` | 通用 |
+| `glm-4.7` | 通用 |
+| `kimi-k2.5` | 通用 |
 
 ## 部署步骤
 
@@ -64,7 +47,7 @@ bash setup.sh
 脚本会自动：
 
 - 检查 Docker 是否安装
-- 引导你输入阿里云 API Key
+- 引导你输入阿里云 Coding Plan API Key（`sk-sp-` 开头）
 - 自动生成随机 Admin Token、Redis 密码、4 个子 Key（只显示一次，记得保存）
 - 构建镜像、启动服务、健康检查
 
@@ -115,24 +98,43 @@ API Key:   sk-sub-xxxxx（你的子 Key）
 }
 ```
 
+**切换模型：**
+
+```bash
+# 启动时指定模型
+claude --model qwen3-coder-next
+
+# 会话中切换
+/model qwen3-max-2026-01-23
+```
+
 > 配额与 OpenAI 协议共享，模型名称与 openclaw 中使用的完全一致。
 
 ## 协议识别规则
 
-代理通过请求头自动判断协议类型：
+代理通过请求路径和请求头自动判断协议类型：
 
-| 请求头 | 协议 | 上游地址 |
-|--------|------|---------|
-| `x-api-key: sk-sub-xxx` | Anthropic | `coding.dashscope.aliyuncs.com/apps/anthropic` |
-| `Authorization: Bearer sk-sub-xxx` | OpenAI | `coding.dashscope.aliyuncs.com/v1` |
+| 路径 | 协议 | 上游地址 |
+|------|------|---------|
+| `/v1/messages` | Anthropic | `coding.dashscope.aliyuncs.com/apps/anthropic` |
+| `/v1/chat/completions` 等 | OpenAI | `coding.dashscope.aliyuncs.com/v1` |
+
+认证方式：`x-api-key` 或 `Authorization: Bearer` 均支持，代理自动转换为上游所需格式。
 
 ## 常用命令
 
 ```bash
-docker compose logs -f proxy    # 查看日志
-docker compose restart proxy    # 重启
-docker compose down             # 停止
-docker compose build && docker compose up -d  # 重新构建并启动
+# docker-compose v2
+docker compose logs -f proxy
+docker compose restart proxy
+docker compose down
+docker compose build && docker compose up -d
+
+# docker-compose v1（旧版）
+docker-compose logs -f proxy
+docker-compose restart proxy
+docker-compose down
+docker-compose build && docker-compose up -d
 ```
 
 ## API 使用
@@ -240,8 +242,9 @@ curl https://your-domain.com/_admin/keys/k1/secret \
 
 ### 2026-03-26
 - 新增 Anthropic 协议支持（Claude Code 接入）
-- 通过请求头自动识别协议类型，无需额外路径前缀
+- 路径 + 请求头组合自动识别协议类型，`x-api-key` / `Authorization: Bearer` 均兼容
 - OpenAI 和 Anthropic 共用同一套子 Key 和配额体系
+- 支持 Claude Code 会话内 `/model` 切换及启动时 `--model` 指定模型
 
 ### 2026-03-24
 - Redis 密码不再泄露到日志
