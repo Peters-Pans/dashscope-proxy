@@ -42,7 +42,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .ierr{color:var(--crit);font-size:12px;margin-top:8px;display:none}
 
 #app{display:none}
-.pw{max-width:740px;margin:0 auto;padding:28px 20px 60px}
+.pw{max-width:780px;margin:0 auto;padding:28px 20px 80px}
 
 /* ── 用户头部 ── */
 .uh{background:var(--card);border:1px solid var(--border);border-radius:var(--r);
@@ -75,21 +75,16 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .uc{background:var(--card);border:1px solid var(--border);border-radius:var(--r);
   padding:22px 24px;box-shadow:0 2px 12px rgba(91,80,232,.05);transition:box-shadow .2s}
 .uc:hover{box-shadow:0 4px 20px rgba(91,80,232,.1)}
-
-/* ── 卡片内布局 ── */
 .uc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .uc-left{display:flex;align-items:center;gap:10px}
 .ucico{width:36px;height:36px;border-radius:9px;background:var(--al);color:var(--accent);
   display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
 .uctitle{font-size:15px;font-weight:600}
 .ucwin{color:var(--t2);font-size:12px;margin-top:2px}
-
 .uc-right{text-align:right;flex-shrink:0}
 .ucpct{font-size:28px;font-weight:800;letter-spacing:-1px;line-height:1}
 .ucpct.ok{color:var(--accent)}.ucpct.warn{color:var(--warn)}.ucpct.crit{color:var(--crit)}
 .ucreset{color:var(--t3);font-size:11px;margin-top:4px}
-
-/* ── 进度条（无浮动标签） ── */
 .btrack{height:10px;background:var(--bar-bg);border-radius:5px;margin-bottom:10px;
   position:relative;overflow:hidden}
 .bfill{height:100%;border-radius:5px;
@@ -97,11 +92,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
   transition:width .6s cubic-bezier(.4,0,.2,1);max-width:100%}
 .bfill.warn{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
 .bfill.crit{background:linear-gradient(90deg,#ef4444,#f87171)}
-/* 90% 虚线标记（不用文字，不会重叠） */
 .btrack::after{content:'';position:absolute;top:0;right:10%;
   width:1px;height:100%;background:rgba(99,102,241,.5)}
-
-/* ── 底部数字 ── */
 .uc-nums{display:flex;justify-content:space-between;align-items:center}
 .ucused{font-size:13px;font-weight:600;color:var(--text)}
 .ucused span{color:var(--t2);font-weight:400}
@@ -124,6 +116,60 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .ab.warn{background:#fffbeb;border:1px solid #fde68a;color:var(--warn)}
 .ab.crit{background:#fef2f2;border:1px solid #fecaca;color:var(--crit)}
 .ab.show{display:flex}
+
+/* ── 教程区域 ── */
+.tut-section{margin-top:32px}
+.tut-header{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+.tut-header h2{font-size:18px;font-weight:700}
+.tut-tabs{display:flex;gap:8px;margin-bottom:20px}
+.tab-btn{padding:8px 20px;border-radius:8px;border:1.5px solid var(--border);
+  background:var(--card);color:var(--t2);font-size:13px;font-weight:600;cursor:pointer;
+  transition:all .2s;font-family:var(--font)}
+.tab-btn.active{background:linear-gradient(135deg,var(--accent),var(--a2));
+  color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(91,80,232,.25)}
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+/* ── 步骤卡片 ── */
+.step-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);
+  padding:24px;margin-bottom:16px;box-shadow:0 2px 12px rgba(91,80,232,.05)}
+.step-num{display:inline-flex;align-items:center;justify-content:center;
+  width:26px;height:26px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),var(--a2));
+  color:#fff;font-size:12px;font-weight:700;flex-shrink:0}
+.step-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.step-desc{color:var(--t2);font-size:13px;line-height:1.7;margin-bottom:14px}
+.step-desc:last-child{margin-bottom:0}
+
+/* ── 代码块 ── */
+.code-block{position:relative;background:#1e1b4b;border-radius:10px;overflow:hidden;margin:12px 0}
+.code-label{position:absolute;top:10px;right:12px;font-size:11px;color:rgba(255,255,255,.4);
+  font-family:var(--mono);pointer-events:none}
+.code-copy{position:absolute;top:8px;right:8px;background:rgba(255,255,255,.1);border:none;
+  border-radius:6px;padding:4px 10px;color:rgba(255,255,255,.7);font-size:11px;cursor:pointer;
+  transition:all .2s;font-family:var(--font)}
+.code-copy:hover{background:rgba(255,255,255,.2);color:#fff}
+pre{padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;
+  line-height:1.7;color:#e2e8f0;white-space:pre}
+.hl-key{color:#a78bfa}
+.hl-val{color:#6ee7b7}
+.hl-str{color:#fcd34d}
+.hl-comment{color:#64748b}
+.hl-cmd{color:#93c5fd}
+
+/* ── 模型列表 ── */
+.model-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.model-tag{background:#f8faff;border:1px solid var(--border);border-radius:8px;
+  padding:8px 12px;display:flex;align-items:center;gap:8px}
+.model-tag code{font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:500}
+.model-tag span{font-size:11px;color:var(--t2)}
+
+/* ── 提示框 ── */
+.tip{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;
+  padding:10px 14px;font-size:12.5px;color:#1e40af;line-height:1.6;margin-top:12px}
+.tip b{font-weight:600}
+
+@media(max-width:520px){.model-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -177,11 +223,168 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
       </div>
       <button class="cpsm" id="cpk" onclick="cpKey()">复制</button>
     </div>
+
+    <!-- ── 接入教程 ── -->
+    <div class="tut-section">
+      <div class="tut-header">
+        <span style="font-size:20px">📖</span>
+        <h2>接入教程</h2>
+      </div>
+
+      <div class="tut-tabs">
+        <button class="tab-btn active" onclick="switchTab('openai')">OpenAI 协议（openclaw 等）</button>
+        <button class="tab-btn" onclick="switchTab('claude')">Anthropic 协议（Claude Code）</button>
+      </div>
+
+      <!-- ── OpenAI 教程 ── -->
+      <div class="tab-content active" id="tab-openai">
+
+        <div class="step-card">
+          <div class="step-title"><div class="step-num">1</div>配置连接信息</div>
+          <div class="step-desc">在支持 OpenAI 协议的工具（openclaw、OpenCode、Cherry Studio 等）中填入以下配置：</div>
+          <div class="code-block">
+            <button class="code-copy" onclick="copyCode(this)">复制</button>
+            <pre>Base URL:  <span class="hl-val" id="oi-url">https://your-domain.com/v1</span>
+API Key:   <span class="hl-key" id="oi-key">sk-sub-xxxxxxxxxx</span></pre>
+          </div>
+          <div class="tip"><b>注意：</b>Base URL 末尾必须带 <code>/v1</code>，否则请求路径会出错。</div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-title"><div class="step-num">2</div>选择模型</div>
+          <div class="step-desc">在工具的模型选择框中输入模型 ID，支持以下 8 个模型：</div>
+          <div class="model-grid">
+            <div class="model-tag"><code>qwen3.5-plus</code><span>通用，超长上下文</span></div>
+            <div class="model-tag"><code>qwen3-max-2026-01-23</code><span>复杂推理</span></div>
+            <div class="model-tag"><code>qwen3-coder-next</code><span>代码专精</span></div>
+            <div class="model-tag"><code>qwen3-coder-plus</code><span>代码专精，长上下文</span></div>
+            <div class="model-tag"><code>MiniMax-M2.5</code><span>通用</span></div>
+            <div class="model-tag"><code>glm-5</code><span>通用</span></div>
+            <div class="model-tag"><code>glm-4.7</code><span>通用</span></div>
+            <div class="model-tag"><code>kimi-k2.5</code><span>通用</span></div>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-title"><div class="step-num">3</div>验证连接（curl 测试）</div>
+          <div class="step-desc">在终端运行以下命令，若返回正常回复则接入成功：</div>
+          <div class="code-block">
+            <button class="code-copy" onclick="copyCode(this)">复制</button>
+            <pre><span class="hl-cmd">curl</span> <span class="hl-val" id="oi-curl-url">https://your-domain.com</span>/v1/chat/completions \
+  -H <span class="hl-str">"Authorization: Bearer <span id="oi-curl-key">sk-sub-xxxxxxxxxx</span>"</span> \
+  -H <span class="hl-str">"Content-Type: application/json"</span> \
+  -d <span class="hl-str">'{"model":"qwen3.5-plus","messages":[{"role":"user","content":"你好"}]}'</span></pre>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-title"><div class="step-num">4</div>查看用量</div>
+          <div class="step-desc">OpenAI 协议和 Anthropic 协议共用同一套配额。使用以下命令查看实时用量：</div>
+          <div class="code-block">
+            <button class="code-copy" onclick="copyCode(this)">复制</button>
+            <pre><span class="hl-cmd">curl</span> <span class="hl-val" id="oi-usage-url">https://your-domain.com</span>/_usage \
+  -H <span class="hl-str">"Authorization: Bearer <span id="oi-usage-key">sk-sub-xxxxxxxxxx</span>"</span></pre>
+          </div>
+        </div>
+
+      </div><!-- /tab-openai -->
+
+      <!-- ── Claude Code 教程 ── -->
+      <div class="tab-content" id="tab-claude">
+
+        <div class="step-card">
+          <div class="step-title"><div class="step-num">1</div>安装 Claude Code</div>
+          <div class="step-desc">需要 Node.js 18+，在终端执行安装命令：</div>
+          <div class="code-block">
+            <button class="code-copy" onclick="copyCode(this)">复制</button>
+            <pre><span class="hl-cmd">npm</span> install -g @anthropic-ai/claude-code</pre>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-title"><div class="step-num">2</div>配置 settings.json</div>
+          <div class="step-desc">编辑 <code>~/.claude/settings.json</code>（不存在则新建），填入以下内容：</div>
+          <div class="code-block">
+            <button class="code-copy" onclick="copyCode(this)">复制</button>
+            <pre>{
+  <span class="hl-key">"env"</span>: {
+    <span class="hl-key">"ANTHROPIC_AUTH_TOKEN"</span>: <span class="hl-str">"<span id="cc-token">sk-sub-xxxxxxxxxx</span>"</span>,
+    <span class="hl-key">"ANTHROPIC_BASE_URL"</span>:  <span class="hl-str">"<span id="cc-base-url">https://your-domain.com</span>"</span>,
+    <span class="hl-key">"ANTHROPIC_MODEL"</span>:     <span class="hl-str">"qwen3.5-plus"</span>
+  }
+}</pre>
+          </div>
+          <div class="tip"><b>注意：</b>Base URL 末尾<b>不要</b>带 <code>/v1</code>，Claude Code 会自动追加。</div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-title"><div class="step-num">3</div>跳过初始化检测</div>
+          <div class="step-desc">Claude Code 首次启动会尝试连接 Anthropic 官方服务器，在中国大陆会失败。在 <code>~/.claude.json</code> 中添加以下字段跳过该步骤：</div>
+          <div class="code-block">
+            <button class="code-copy" onclick="copyCode(this)">复制</button>
+            <pre>{
+  <span class="hl-key">"hasCompletedOnboarding"</span>: <span class="hl-val">true</span>
+}</pre>
+          </div>
+          <div class="tip">如果 <code>~/.claude.json</code> 已存在其他字段，只需追加这一条，不要覆盖原有内容。</div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-title"><div class="step-num">4</div>启动并验证</div>
+          <div class="step-desc">进入项目目录，启动 Claude Code：</div>
+          <div class="code-block">
+            <button class="code-copy" onclick="copyCode(this)">复制</button>
+            <pre><span class="hl-cmd">cd</span> your-project
+<span class="hl-cmd">claude</span>                          <span class="hl-comment"># 交互模式</span>
+<span class="hl-cmd">claude</span> --print <span class="hl-str">"解释这段代码"</span>    <span class="hl-comment"># 非交互输出</span></pre>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-title"><div class="step-num">5</div>切换模型</div>
+          <div class="step-desc">支持以下 8 个模型，可随时切换：</div>
+          <div class="model-grid">
+            <div class="model-tag"><code>qwen3.5-plus</code><span>通用，超长上下文</span></div>
+            <div class="model-tag"><code>qwen3-max-2026-01-23</code><span>复杂推理</span></div>
+            <div class="model-tag"><code>qwen3-coder-next</code><span>代码专精</span></div>
+            <div class="model-tag"><code>qwen3-coder-plus</code><span>代码专精，长上下文</span></div>
+            <div class="model-tag"><code>MiniMax-M2.5</code><span>通用</span></div>
+            <div class="model-tag"><code>glm-5</code><span>通用</span></div>
+            <div class="model-tag"><code>glm-4.7</code><span>通用</span></div>
+            <div class="model-tag"><code>kimi-k2.5</code><span>通用</span></div>
+          </div>
+          <div class="code-block" style="margin-top:14px">
+            <button class="code-copy" onclick="copyCode(this)">复制</button>
+            <pre><span class="hl-comment"># 启动时指定模型</span>
+<span class="hl-cmd">claude</span> --model qwen3-coder-next
+
+<span class="hl-comment"># 会话中切换（在对话框输入）</span>
+/model qwen3-max-2026-01-23</pre>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-title"><div class="step-num">6</div>常用技巧</div>
+          <div class="step-desc">Claude Code 常用命令：</div>
+          <div class="code-block">
+            <button class="code-copy" onclick="copyCode(this)">复制</button>
+            <pre>/help      <span class="hl-comment"># 查看所有命令</span>
+/clear     <span class="hl-comment"># 清除对话历史</span>
+/compact   <span class="hl-comment"># 压缩上下文（避免超限）</span>
+/model     <span class="hl-comment"># 切换模型</span>
+/status    <span class="hl-comment"># 查看当前连接状态</span></pre>
+          </div>
+          <div class="tip">遇到 <b>400 输入超限</b>，执行 <code>/compact</code> 压缩上下文或 <code>/clear</code> 新建会话。</div>
+        </div>
+
+      </div><!-- /tab-claude -->
+
+    </div><!-- /tut-section -->
   </div>
 </div>
 
 <script>
-let myKey='', D=null;
+let myKey='', D=null, BASE_URL=location.origin;
 
 async function doQ(){
   const k=document.getElementById('ki').value.trim(); if(!k)return;
@@ -189,8 +392,9 @@ async function doQ(){
   if(r.ok){myKey=k;D=await r.json();
     document.getElementById('login-screen').style.display='none';
     document.getElementById('app').style.display='block';
-    render();}
-  else document.getElementById('ierr').style.display='block';
+    fillTutorial();
+    render();
+  } else document.getElementById('ierr').style.display='block';
 }
 document.getElementById('ki').addEventListener('keydown',e=>e.key==='Enter'&&doQ());
 
@@ -213,7 +417,6 @@ function render(){
   document.getElementById('rts').textContent=
     '最后统计时间 '+now.toLocaleDateString('zh-CN')+' '+now.toLocaleTimeString('zh-CN');
 
-  // 警告横幅
   const mp=Math.max(D.pct.month,D.pct.week,D.pct['5h']);
   const ab=document.getElementById('ab');
   if(mp>=90){ab.className='ab crit show';document.getElementById('am').textContent='配额即将耗尽，请联系管理员';}
@@ -225,35 +428,53 @@ function render(){
     {title:'近一周用量',dim:'week', ico:'📆',win:'自然周固定窗口'},
     {title:'近 5 小时用量',dim:'5h',ico:'⏱',win:'5小时固定块窗口'},
   ];
-
   document.getElementById('ucards').innerHTML=cards.map(({title,dim,ico,win})=>{
     const used=D.usage[dim], lim=D.limits[dim];
     const pct=Math.min(100,Math.round(used/lim*100));
     const left=lim-used, cls=pc(pct);
-    const reset=D.reset_at[dim];
     return `<div class="uc">
       <div class="uc-top">
         <div class="uc-left">
           <div class="ucico">${ico}</div>
-          <div>
-            <div class="uctitle">${title}</div>
-            <div class="ucwin">🔄 ${win}</div>
-          </div>
+          <div><div class="uctitle">${title}</div><div class="ucwin">🔄 ${win}</div></div>
         </div>
         <div class="uc-right">
           <div class="ucpct ${cls}">${pct}%</div>
-          <div class="ucreset">重置于 ${reset}</div>
+          <div class="ucreset">重置于 ${D.reset_at[dim]}</div>
         </div>
       </div>
-      <div class="btrack">
-        <div class="bfill ${cls==='ok'?'':cls}" style="width:${pct}%"></div>
-      </div>
+      <div class="btrack"><div class="bfill ${cls==='ok'?'':cls}" style="width:${pct}%"></div></div>
       <div class="uc-nums">
         <div class="ucused">${used.toLocaleString()} <span>/ ${lim.toLocaleString()} 次</span></div>
         <div class="ucleft ${cls}">剩余 <strong>${left.toLocaleString()} 次</strong></div>
       </div>
     </div>`;
   }).join('');
+}
+
+function fillTutorial(){
+  // 自动填入用户的 key 和当前域名
+  const ids={
+    'oi-key':myKey,'oi-curl-key':myKey,'oi-usage-key':myKey,'cc-token':myKey,
+    'oi-url':BASE_URL+'/v1','oi-curl-url':BASE_URL,'oi-usage-url':BASE_URL,'cc-base-url':BASE_URL
+  };
+  for(const[id,val]of Object.entries(ids)){
+    const el=document.getElementById(id); if(el) el.textContent=val;
+  }
+}
+
+function switchTab(name){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+async function copyCode(btn){
+  const pre=btn.parentElement.querySelector('pre');
+  await navigator.clipboard.writeText(pre.innerText);
+  btn.textContent='已复制 ✓';
+  setTimeout(()=>btn.textContent='复制',2000);
 }
 
 async function cpKey(){
