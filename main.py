@@ -1,6 +1,7 @@
 """
 阿里云 DashScope 代理
 固定周期窗口：5H(整点对齐) / 自然周(周一重置) / 自然月(1号重置)
+支持 OpenAI 协议（兼容 OpenAI 工具）和 Anthropic 协议（Claude Code）
 """
 
 import os, uuid, time, json, secrets, string, calendar
@@ -24,7 +25,7 @@ DEFAULT_LIMITS = {"5h": 1_500, "week": 11_250, "month": 22_500}
 class LimitsUpdate(BaseModel):
     """配额限制更新"""
     model_config = ConfigDict(populate_by_name=True)
-    
+
     month: int | None = Field(None, ge=0, le=1_000_000_000, description="月限额")
     week: int | None = Field(None, ge=0, le=500_000_000, description="周限额")
     five_hour: int | None = Field(None, alias="5h", ge=0, le=100_000_000, description="5小时限额")
@@ -39,13 +40,16 @@ class LabelUpdate(BaseModel):
 class UsageUpdate(BaseModel):
     """用量更新"""
     model_config = ConfigDict(populate_by_name=True)
-    
+
     month: int | None = Field(None, ge=0, le=1_000_000_000, description="月用量")
     week: int | None = Field(None, ge=0, le=500_000_000, description="周用量")
     five_hour: int | None = Field(None, alias="5h", ge=0, le=100_000_000, description="5小时用量")
 
-# Coding Plan 包含的模型白名单，只有调用这些模型才计入配额
-# 非白名单模型：直接拒绝 403，不扣配额
+# ─────────────────────────────────────────
+#  Coding Plan 模型白名单
+# ─────────────────────────────────────────
+
+# OpenAI 协议白名单：调用这些模型才计入配额，其他模型直接透传不扣额
 PLAN_MODELS: set[str] = {
     "qwen3.5-plus",
     "qwen3-max-2026-01-23",
@@ -57,8 +61,24 @@ PLAN_MODELS: set[str] = {
     "kimi-k2.5",
 }
 
-ALIYUN_BASE = os.getenv("ALIYUN_BASE_URL", "https://coding.dashscope.aliyuncs.com/v1")
-ALIYUN_KEY  = os.getenv("ALIYUN_API_KEY", "")
+# Anthropic 协议白名单：Claude Code 使用，计入同一套配额
+# 根据百炼 Coding Plan 实际支持的模型填写，其他模型直接透传不扣额
+ANTHROPIC_PLAN_MODELS: set[str] = {
+    "claude-sonnet-4-5",
+    "claude-opus-4-5",
+    "claude-3-7-sonnet-20250219",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-haiku-20241022",
+    "claude-3-opus-20240229",
+}
+
+# ─────────────────────────────────────────
+#  上游地址 & 认证
+# ─────────────────────────────────────────
+ALIYUN_BASE      = os.getenv("ALIYUN_BASE_URL",      "https://coding.dashscope.aliyuncs.com/v1")
+ANTHROPIC_BASE   = os.getenv("ANTHROPIC_BASE",        "https://coding.dashscope.aliyuncs.com/apps/anthropic")
+ALIYUN_KEY       = os.getenv("ALIYUN_API_KEY",        "")
+
 _admin_token_raw = os.getenv("ADMIN_TOKEN", "change-me")
 if _admin_token_raw == "change-me":
     raise RuntimeError("启动失败：请在环境变量中设置 ADMIN_TOKEN，不能使用默认值 'change-me'")
@@ -371,46 +391,12 @@ async def user_usage(request: Request):
 
 
 # ─────────────────────────────────────────
-#  主代理
+#  配额检查公共逻辑
 # ─────────────────────────────────────────
-from starlette.responses import StreamingResponse
-
-@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-async def proxy(path: str, request: Request):
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
-        raise HTTPException(401, "Missing Authorization header")
-    secret = auth.removeprefix("Bearer ").strip()
-    kid = await rdb.hget("map:secret", secret)
-    if not kid: raise HTTPException(401, "Invalid API key")
-    meta = await _get_meta(kid)
-    if not meta or not meta["enabled"]: raise HTTPException(403, "Key is disabled")
-
-    body = await request.body()
-
-    # ── 检查模型是否在 Plan 白名单内 ─────────────
-    in_plan = True
-    if body:
-        try:
-            req_json = json.loads(body)
-            model = req_json.get("model", "")
-            if model and model not in PLAN_MODELS:
-                in_plan = False
-        except Exception:
-            pass  # 非 JSON 请求直接放行
-
-    upstream_headers = {k: v for k, v in request.headers.items()
-                        if k.lower() not in ("host", "authorization", "content-length")}
-    upstream_headers["Authorization"] = f"Bearer {ALIYUN_KEY}"
-
-    # ── 非 Plan 模型：直接透传，不扣配额 ─────────
-    if not in_plan:
-        return await _forward(request, path, upstream_headers, body, quota_keys=None)
-
-    # ── Plan 模型：先扣配额，再转发 ───────────────
+async def _check_and_deduct_quota(kid: str, meta: dict) -> tuple:
+    """检查并扣除配额，返回 (k5h, kw, km) 用于回滚。配额不足时抛出 HTTPException。"""
     lims = _limits(meta)
     pi   = period_info(kid)
-    req_id = str(uuid.uuid4())
     k5h, kw, km = pi["5h"]["key"], pi["week"]["key"], pi["month"]["key"]
     e5h, ew, em = pi["5h"]["expire_at"], pi["week"]["expire_at"], pi["month"]["expire_at"]
 
@@ -426,22 +412,106 @@ async def proxy(path: str, request: Request):
             "MONTH_LIMIT": f"本月配额已用尽，重置于 {pi['month']['reset_at']}",
         }
         raise HTTPException(429, msgs.get(res, res))
-
-    return await _forward(request, path, upstream_headers, body,
-                          quota_keys=(k5h, kw, km))
+    return (k5h, kw, km)
 
 
-async def _forward(request: Request, path: str,
+# ─────────────────────────────────────────
+#  主代理
+# ─────────────────────────────────────────
+from starlette.responses import StreamingResponse
+
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy(path: str, request: Request):
+    # ── 协议检测：优先 x-api-key（Anthropic），其次 Authorization Bearer（OpenAI）──
+    x_api_key  = request.headers.get("x-api-key", "").strip()
+    auth_header = request.headers.get("Authorization", "")
+
+    if x_api_key:
+        return await _handle_anthropic(request, path, x_api_key)
+    elif auth_header.startswith("Bearer "):
+        secret = auth_header.removeprefix("Bearer ").strip()
+        return await _handle_openai(request, path, secret)
+    else:
+        raise HTTPException(401, "Missing Authorization header")
+
+
+async def _handle_openai(request: Request, path: str, secret: str):
+    """处理 OpenAI 协议请求，转发到 DashScope OpenAI 兼容端点。"""
+    kid = await rdb.hget("map:secret", secret)
+    if not kid: raise HTTPException(401, "Invalid API key")
+    meta = await _get_meta(kid)
+    if not meta or not meta["enabled"]: raise HTTPException(403, "Key is disabled")
+
+    body = await request.body()
+
+    # ── 检查模型是否在 OpenAI Plan 白名单内 ──
+    in_plan = True
+    if body:
+        try:
+            model = json.loads(body).get("model", "")
+            if model and model not in PLAN_MODELS:
+                in_plan = False
+        except Exception:
+            pass  # 非 JSON 请求直接放行
+
+    # 去掉 path 开头的 v1/（ALIYUN_BASE 已包含 /v1）
+    upstream_path = path[3:] if path.startswith("v1/") else path
+    upstream_url  = f"{ALIYUN_BASE}/{upstream_path}"
+
+    upstream_headers = {k: v for k, v in request.headers.items()
+                        if k.lower() not in ("host", "authorization", "content-length",
+                                             "transfer-encoding", "connection", "keep-alive")}
+    upstream_headers["Authorization"] = f"Bearer {ALIYUN_KEY}"
+
+    if not in_plan:
+        return await _forward(request, upstream_url, upstream_headers, body, quota_keys=None)
+
+    quota_keys = await _check_and_deduct_quota(kid, meta)
+    return await _forward(request, upstream_url, upstream_headers, body, quota_keys=quota_keys)
+
+
+async def _handle_anthropic(request: Request, path: str, secret: str):
+    """处理 Anthropic 协议请求，转发到 DashScope Anthropic 兼容端点。"""
+    kid = await rdb.hget("map:secret", secret)
+    if not kid: raise HTTPException(401, "Invalid API key")
+    meta = await _get_meta(kid)
+    if not meta or not meta["enabled"]: raise HTTPException(403, "Key is disabled")
+
+    body = await request.body()
+
+    # ── 检查模型是否在 Anthropic Plan 白名单内 ──
+    in_plan = True
+    if body:
+        try:
+            model = json.loads(body).get("model", "")
+            if model and model not in ANTHROPIC_PLAN_MODELS:
+                in_plan = False
+        except Exception:
+            pass
+
+    # Anthropic 协议：path 保持原样（ANTHROPIC_BASE 不含 /v1）
+    upstream_url = f"{ANTHROPIC_BASE}/{path}"
+
+    # 构造上游请求头：移除客户端 x-api-key，注入真实阿里云 Key
+    upstream_headers = {k: v for k, v in request.headers.items()
+                        if k.lower() not in ("host", "x-api-key", "content-length",
+                                             "transfer-encoding", "connection", "keep-alive")}
+    upstream_headers["x-api-key"] = ALIYUN_KEY
+
+    if not in_plan:
+        return await _forward(request, upstream_url, upstream_headers, body, quota_keys=None)
+
+    quota_keys = await _check_and_deduct_quota(kid, meta)
+    return await _forward(request, upstream_url, upstream_headers, body, quota_keys=quota_keys)
+
+
+async def _forward(request: Request, upstream_url: str,
                    headers: dict, body: bytes,
                    quota_keys: tuple | None):
     """
-    透传请求到阿里云，自动处理流式/非流式。
+    透传请求到上游，自动处理流式/非流式。
     quota_keys: 若上游失败需要回滚的 Redis key 三元组，None 表示不回滚。
     """
-    # 去掉 path 开头的 v1/（因为 ALIYUN_BASE 已包含 /v1）
-    if path.startswith("v1/"):
-        path = path[3:]
-    
     is_stream = False
     if body:
         try:
@@ -459,7 +529,7 @@ async def _forward(request: Request, path: str,
                 async with httpx.AsyncClient(timeout=None) as client:
                     async with client.stream(
                         method=request.method,
-                        url=f"{ALIYUN_BASE}/{path}",
+                        url=upstream_url,
                         headers=headers, content=body,
                         params=dict(request.query_params),
                     ) as upstream:
@@ -473,7 +543,6 @@ async def _forward(request: Request, path: str,
                     await rdb.eval(LUA_ROLLBACK, 3, *quota_keys)
                 raise
 
-        # 先拿到响应头需要 head_only 请求，但流式场景直接返回 text/event-stream
         return StreamingResponse(
             event_stream(),
             media_type="text/event-stream",
@@ -485,7 +554,7 @@ async def _forward(request: Request, path: str,
         async with httpx.AsyncClient(timeout=120.0) as client:
             upstream = await client.request(
                 method=request.method,
-                url=f"{ALIYUN_BASE}/{path}",
+                url=upstream_url,
                 headers=headers, content=body,
                 params=dict(request.query_params),
             )

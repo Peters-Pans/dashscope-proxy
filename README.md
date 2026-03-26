@@ -2,19 +2,21 @@
 
 阿里云 DashScope API 代理服务，支持多子 Key 管理、配额控制、用量统计。
 
+同时兼容 **OpenAI 协议**（openclaw 等工具）和 **Anthropic 协议**（Claude Code），共用同一套子 Key 和配额体系。
+
 ## 功能特性
 
+- **双协议支持**：OpenAI 协议 + Anthropic 协议，自动识别，无需额外配置
 - **多子 Key 管理**：自动生成 4 个子 Key，支持动态管理
 - **固定周期配额**：5H（整点对齐）/ 自然周 / 自然月
 - **模型白名单**：只有 Coding Plan 包含的模型才计入配额
 - **管理后台**：可视化查看用量、管理 Key
 - **用户面板**：用户自助查看自己的配额使用情况
-- **安全特性**：
-  - Redis 密码不泄露到日志
-  - API Key 脱敏显示，按需获取完整密钥
-  - Pydantic 输入校验
+- **安全特性**：Redis 密码不泄露到日志，API Key 脱敏显示，Pydantic 输入校验
 
 ## 支持的模型
+
+### OpenAI 协议（openclaw 等）
 
 白名单内的模型计入配额，其他模型直接透传不计费：
 
@@ -28,6 +30,21 @@ glm-5
 glm-4.7
 kimi-k2.5
 ```
+
+### Anthropic 协议（Claude Code）
+
+白名单内的模型计入配额，其他模型直接透传不计费：
+
+```
+claude-sonnet-4-5
+claude-opus-4-5
+claude-3-7-sonnet-20250219
+claude-3-5-sonnet-20241022
+claude-3-5-haiku-20241022
+claude-3-opus-20240229
+```
+
+> 根据百炼 Coding Plan 实际支持的模型更新 `main.py` 中的 `ANTHROPIC_PLAN_MODELS`。
 
 ## 部署步骤
 
@@ -67,6 +84,42 @@ nginx -t && systemctl reload nginx
 certbot --nginx -d your-domain.com
 ```
 
+## 客户端接入
+
+### openclaw / OpenAI 兼容工具
+
+```
+Base URL:  https://your-domain.com/v1
+API Key:   sk-sub-xxxxx（你的子 Key）
+```
+
+### Claude Code
+
+在终端或 `~/.claude/.env` 中设置：
+
+```bash
+export ANTHROPIC_BASE_URL=https://your-domain.com
+export ANTHROPIC_API_KEY=sk-sub-xxxxx   # 你的子 Key
+```
+
+或在项目根目录创建 `.env`：
+
+```
+ANTHROPIC_BASE_URL=https://your-domain.com
+ANTHROPIC_API_KEY=sk-sub-xxxxx
+```
+
+> Claude Code 的请求会自动路由到百炼 Anthropic 兼容端点，配额与 OpenAI 协议共享。
+
+## 协议识别规则
+
+代理通过请求头自动判断协议类型：
+
+| 请求头 | 协议 | 上游地址 |
+|--------|------|---------|
+| `x-api-key: sk-sub-xxx` | Anthropic | `coding.dashscope.aliyuncs.com/apps/anthropic` |
+| `Authorization: Bearer sk-sub-xxx` | OpenAI | `coding.dashscope.aliyuncs.com/v1` |
+
 ## 常用命令
 
 ```bash
@@ -78,13 +131,23 @@ docker compose build && docker compose up -d  # 重新构建并启动
 
 ## API 使用
 
-### 代理请求
+### OpenAI 协议代理请求
 
 ```bash
 curl https://your-domain.com/v1/chat/completions \
   -H "Authorization: Bearer sk-sub-xxxxx" \
   -H "Content-Type: application/json" \
   -d '{"model": "qwen3.5-plus", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+### Anthropic 协议代理请求
+
+```bash
+curl https://your-domain.com/v1/messages \
+  -H "x-api-key: sk-sub-xxxxx" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "claude-3-5-sonnet-20241022", "max_tokens": 1024, "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
 ### 查看用量（用户端）
@@ -148,6 +211,7 @@ curl https://your-domain.com/_admin/keys/k1/secret \
 ### 配额校验规则
 
 - 任意周期达到上限都会拒绝请求（429）
+- OpenAI 和 Anthropic 协议共用同一套配额计数
 - 流式请求失败会自动回滚配额
 - 客户端主动断开不回滚（上游已处理）
 
@@ -168,12 +232,17 @@ curl https://your-domain.com/_admin/keys/k1/secret \
 
 ## 更新日志
 
+### 2026-03-26
+- 新增 Anthropic 协议支持（Claude Code 接入）
+- 通过请求头自动识别协议类型，无需额外路径前缀
+- OpenAI 和 Anthropic 共用同一套子 Key 和配额体系
+
 ### 2026-03-24
-- 🔒 Redis 密码不再泄露到日志
-- 🔒 API Key 脱敏显示，需单独接口获取完整密钥
-- ✅ 添加 Pydantic 输入校验
-- 🐛 修复 API 路径转发问题（baseUrl 与官方一致，含 /v1）
-- 📝 完善 README 文档
+- Redis 密码不再泄露到日志
+- API Key 脱敏显示，需单独接口获取完整密钥
+- 添加 Pydantic 输入校验
+- 修复 API 路径转发问题（baseUrl 与官方一致，含 /v1）
+- 完善 README 文档
 
 ## License
 
