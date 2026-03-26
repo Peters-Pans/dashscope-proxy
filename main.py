@@ -61,7 +61,25 @@ PLAN_MODELS: set[str] = {
     "kimi-k2.5",
 }
 
-# Anthropic 协议与 OpenAI 协议共用同一套白名单
+# Anthropic 协议 Claude 模型名 → DashScope 模型名映射
+# Claude Code 只允许 claude-* 模型名，代理负责替换成实际的 DashScope 模型
+CLAUDE_MODEL_MAP: dict[str, str] = {
+    # Sonnet 系列 → qwen3.5-plus
+    "claude-sonnet-4-5":                "qwen3.5-plus",
+    "claude-3-7-sonnet-20250219":       "qwen3.5-plus",
+    "claude-3-5-sonnet-20241022":       "qwen3.5-plus",
+    "claude-3-5-sonnet-20240620":       "qwen3.5-plus",
+    # Haiku 系列 → qwen3-coder-plus（轻量）
+    "claude-3-5-haiku-20241022":        "qwen3-coder-plus",
+    "claude-3-haiku-20240307":          "qwen3-coder-plus",
+    # Opus 系列 → qwen3-max（最强）
+    "claude-opus-4-5":                  "qwen3-max-2026-01-23",
+    "claude-3-opus-20240229":           "qwen3-max-2026-01-23",
+    # Coder 系列
+    "claude-3-5-sonnet-coder":          "qwen3-coder-next",
+}
+# 未在映射表中的 claude-* 模型，回落到此默认模型
+CLAUDE_DEFAULT_MODEL = "qwen3.5-plus"
 
 # ─────────────────────────────────────────
 #  上游地址 & 认证
@@ -470,13 +488,22 @@ async def _handle_anthropic(request: Request, path: str, secret: str):
 
     body = await request.body()
 
-    # ── 检查模型是否在 Plan 白名单内（与 OpenAI 协议共用）──
+    # ── 模型名处理：claude-* 重映射为 DashScope 模型名 ──
+    # Claude Code 客户端只允许 claude-* 格式，代理负责替换成实际模型
     in_plan = True
     if body:
         try:
-            model = json.loads(body).get("model", "")
-            if model and model not in PLAN_MODELS:
-                in_plan = False
+            req_json = json.loads(body)
+            model = req_json.get("model", "")
+            if model:
+                if model in CLAUDE_MODEL_MAP:
+                    req_json["model"] = CLAUDE_MODEL_MAP[model]
+                    body = json.dumps(req_json).encode()
+                elif model.startswith("claude-"):
+                    req_json["model"] = CLAUDE_DEFAULT_MODEL
+                    body = json.dumps(req_json).encode()
+                elif model not in PLAN_MODELS:
+                    in_plan = False
         except Exception:
             pass
 
