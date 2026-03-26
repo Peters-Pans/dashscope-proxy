@@ -61,16 +61,7 @@ PLAN_MODELS: set[str] = {
     "kimi-k2.5",
 }
 
-# Anthropic 协议白名单：Claude Code 使用，计入同一套配额
-# 根据百炼 Coding Plan 实际支持的模型填写，其他模型直接透传不扣额
-ANTHROPIC_PLAN_MODELS: set[str] = {
-    "claude-sonnet-4-5",
-    "claude-opus-4-5",
-    "claude-3-7-sonnet-20250219",
-    "claude-3-5-sonnet-20241022",
-    "claude-3-5-haiku-20241022",
-    "claude-3-opus-20240229",
-}
+# Anthropic 协议白名单与 OpenAI 协议共用同一套模型（百炼两个端点支持的模型相同）
 
 # ─────────────────────────────────────────
 #  上游地址 & 认证
@@ -479,12 +470,12 @@ async def _handle_anthropic(request: Request, path: str, secret: str):
 
     body = await request.body()
 
-    # ── 检查模型是否在 Anthropic Plan 白名单内 ──
+    # ── 检查模型是否在 Plan 白名单内（与 OpenAI 协议共用同一套白名单）──
     in_plan = True
     if body:
         try:
             model = json.loads(body).get("model", "")
-            if model and model not in ANTHROPIC_PLAN_MODELS:
+            if model and model not in PLAN_MODELS:
                 in_plan = False
         except Exception:
             pass

@@ -33,18 +33,18 @@ kimi-k2.5
 
 ### Anthropic 协议（Claude Code）
 
-白名单内的模型计入配额，其他模型直接透传不计费：
+与 OpenAI 协议共用同一套模型白名单（百炼两个端点支持的模型相同）：
 
 ```
-claude-sonnet-4-5
-claude-opus-4-5
-claude-3-7-sonnet-20250219
-claude-3-5-sonnet-20241022
-claude-3-5-haiku-20241022
-claude-3-opus-20240229
+qwen3.5-plus
+qwen3-max-2026-01-23
+qwen3-coder-next
+qwen3-coder-plus
+MiniMax-M2.5
+glm-5
+glm-4.7
+kimi-k2.5
 ```
-
-> 根据百炼 Coding Plan 实际支持的模型更新 `main.py` 中的 `ANTHROPIC_PLAN_MODELS`。
 
 ## 部署步骤
 
@@ -95,21 +95,27 @@ API Key:   sk-sub-xxxxx（你的子 Key）
 
 ### Claude Code
 
-在终端或 `~/.claude/.env` 中设置：
+编辑 `~/.claude/settings.json`（不存在则新建）：
 
-```bash
-export ANTHROPIC_BASE_URL=https://your-domain.com
-export ANTHROPIC_API_KEY=sk-sub-xxxxx   # 你的子 Key
+```json
+{
+    "env": {
+        "ANTHROPIC_AUTH_TOKEN": "sk-sub-xxxxx",
+        "ANTHROPIC_BASE_URL": "https://your-domain.com",
+        "ANTHROPIC_MODEL": "qwen3.5-plus"
+    }
+}
 ```
 
-或在项目根目录创建 `.env`：
+同时确保 `~/.claude.json` 中有：
 
-```
-ANTHROPIC_BASE_URL=https://your-domain.com
-ANTHROPIC_API_KEY=sk-sub-xxxxx
+```json
+{
+  "hasCompletedOnboarding": true
+}
 ```
 
-> Claude Code 的请求会自动路由到百炼 Anthropic 兼容端点，配额与 OpenAI 协议共享。
+> 配额与 OpenAI 协议共享，模型名称与 openclaw 中使用的完全一致。
 
 ## 协议识别规则
 
@@ -147,7 +153,7 @@ curl https://your-domain.com/v1/messages \
   -H "x-api-key: sk-sub-xxxxx" \
   -H "anthropic-version: 2023-06-01" \
   -H "Content-Type: application/json" \
-  -d '{"model": "claude-3-5-sonnet-20241022", "max_tokens": 1024, "messages": [{"role": "user", "content": "Hello"}]}'
+  -d '{"model": "qwen3.5-plus", "max_tokens": 1024, "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
 ### 查看用量（用户端）
