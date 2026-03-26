@@ -4,7 +4,7 @@
 支持 OpenAI 协议（兼容 OpenAI 工具）和 Anthropic 协议（Claude Code）
 """
 
-import os, uuid, time, json, secrets, string, calendar, re
+import os, uuid, time, json, secrets, string, calendar
 import datetime
 
 import httpx
@@ -60,19 +60,6 @@ PLAN_MODELS: set[str] = {
     "glm-4.7",
     "kimi-k2.5",
 }
-
-# Anthropic 协议 claude-* → DashScope 模型名映射
-# Claude Code 客户端校验模型名必须是 claude-* 格式，代理负责替换
-CLAUDE_MODEL_MAP: dict[str, str] = {
-    "claude-3-5-sonnet-20241022":   "qwen3.5-plus",
-    "claude-3-7-sonnet-20250219":   "qwen3.5-plus",
-    "claude-sonnet-4-5":            "qwen3.5-plus",
-    "claude-3-5-haiku-20241022":    "qwen3-coder-plus",
-    "claude-3-haiku-20240307":      "qwen3-coder-plus",
-    "claude-opus-4-5":              "qwen3-max-2026-01-23",
-    "claude-3-opus-20240229":       "qwen3-max-2026-01-23",
-}
-CLAUDE_DEFAULT_MODEL = "qwen3.5-plus"  # 未匹配 claude-* 的回落值
 
 # ─────────────────────────────────────────
 #  上游地址 & 认证
@@ -424,17 +411,27 @@ from starlette.responses import StreamingResponse
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def proxy(path: str, request: Request):
-    # ── 协议检测：优先 x-api-key（Anthropic），其次 Authorization Bearer（OpenAI）──
-    x_api_key  = request.headers.get("x-api-key", "").strip()
+    # ── 协议检测 ──
+    # 路径 v1/messages 是 Anthropic 专属端点，无论 auth 格式都走 Anthropic handler
+    # 路径 v1/chat/completions 是 OpenAI 端点
+    # x-api-key 存在时也视为 Anthropic
+    x_api_key   = request.headers.get("x-api-key", "").strip()
     auth_header = request.headers.get("Authorization", "")
 
+    is_anthropic_path = (path == "v1/messages" or path.startswith("v1/messages?")
+                         or path == "messages" or path.startswith("messages?"))
+
     if x_api_key:
-        return await _handle_anthropic(request, path, x_api_key)
+        secret = x_api_key
     elif auth_header.startswith("Bearer "):
         secret = auth_header.removeprefix("Bearer ").strip()
-        return await _handle_openai(request, path, secret)
     else:
         raise HTTPException(401, "Missing Authorization header")
+
+    if x_api_key or is_anthropic_path:
+        return await _handle_anthropic(request, path, secret)
+    else:
+        return await _handle_openai(request, path, secret)
 
 
 async def _handle_openai(request: Request, path: str, secret: str):
@@ -481,74 +478,41 @@ async def _handle_anthropic(request: Request, path: str, secret: str):
 
     body = await request.body()
 
-    # ── 模型名处理：claude-* 重映射为 DashScope 模型名 ──
-    # Claude Code 校验请求和响应里的模型名，两端都需要替换
-    original_model = None   # 保存原始 claude-* 名称，用于替换响应
+    # ── 检查模型是否在 Plan 白名单内 ──
     in_plan = True
     if body:
         try:
-            req_json = json.loads(body)
-            model = req_json.get("model", "")
-            if model:
-                if model in CLAUDE_MODEL_MAP:
-                    original_model = model
-                    req_json["model"] = CLAUDE_MODEL_MAP[model]
-                    body = json.dumps(req_json).encode()
-                elif model.startswith("claude-"):
-                    original_model = model
-                    req_json["model"] = CLAUDE_DEFAULT_MODEL
-                    body = json.dumps(req_json).encode()
-                elif model not in PLAN_MODELS:
-                    in_plan = False
+            model = json.loads(body).get("model", "")
+            if model and model not in PLAN_MODELS:
+                in_plan = False
         except Exception:
             pass
 
     # Anthropic 协议：path 保持原样（ANTHROPIC_BASE 不含 /v1）
     upstream_url = f"{ANTHROPIC_BASE}/{path}"
 
-    # 构造上游请求头：移除客户端 x-api-key，注入真实阿里云 Key
+    # 构造上游请求头：移除客户端认证头，注入真实阿里云 Key
     upstream_headers = {k: v for k, v in request.headers.items()
-                        if k.lower() not in ("host", "x-api-key", "content-length",
-                                             "transfer-encoding", "connection", "keep-alive")}
+                        if k.lower() not in ("host", "x-api-key", "authorization",
+                                             "content-length", "transfer-encoding",
+                                             "connection", "keep-alive")}
     upstream_headers["x-api-key"] = ALIYUN_KEY
 
     if not in_plan:
-        return await _forward(request, upstream_url, upstream_headers, body,
-                              quota_keys=None, restore_model=None)
+        return await _forward(request, upstream_url, upstream_headers, body, quota_keys=None)
 
     quota_keys = await _check_and_deduct_quota(kid, meta)
-    return await _forward(request, upstream_url, upstream_headers, body,
-                          quota_keys=quota_keys, restore_model=original_model)
+    return await _forward(request, upstream_url, upstream_headers, body, quota_keys=quota_keys)
 
 
 async def _forward(request: Request, upstream_url: str,
                    headers: dict, body: bytes,
-                   quota_keys: tuple | None,
-                   restore_model: str | None = None):
-    """
-    透传请求到上游，自动处理流式/非流式。
-    quota_keys:    若上游失败需要回滚的 Redis key 三元组，None 表示不回滚。
-    restore_model: 原始 claude-* 模型名，用于将响应体中的 DashScope 模型名替换回去，
-                   让 Claude Code 的响应模型名校验通过。
-    """
+                   quota_keys: tuple | None):
+    """透传请求到上游，自动处理流式/非流式。quota_keys 为 None 时不回滚配额。"""
     is_stream = False
     if body:
         try:
             is_stream = json.loads(body).get("stream", False)
-        except Exception:
-            pass
-
-    # 预编译模型名替换 pattern（处理 JSON 中可能有空格的情况）
-    restore_pattern = None
-    restore_replacement = None
-    if restore_model and body:
-        try:
-            actual_model = json.loads(body).get("model", "")
-            if actual_model and actual_model != restore_model:
-                restore_pattern = re.compile(
-                    ('"model"\\s*:\\s*"' + re.escape(actual_model) + '"').encode()
-                )
-                restore_replacement = f'"model":"{restore_model}"'.encode()
         except Exception:
             pass
 
@@ -558,7 +522,6 @@ async def _forward(request: Request, upstream_url: str,
     if is_stream:
         async def event_stream():
             rollback_done = False
-            model_restored = False
             try:
                 async with httpx.AsyncClient(timeout=None) as client:
                     async with client.stream(
@@ -571,12 +534,6 @@ async def _forward(request: Request, upstream_url: str,
                             await rdb.eval(LUA_ROLLBACK, 3, *quota_keys)
                             rollback_done = True
                         async for chunk in upstream.aiter_bytes():
-                            # 替换响应中的 DashScope 模型名为原始 claude-* 名称
-                            if restore_pattern and not model_restored:
-                                new_chunk = restore_pattern.sub(restore_replacement, chunk)
-                                if new_chunk != chunk:
-                                    model_restored = True
-                                chunk = new_chunk
                             yield chunk
             except Exception:
                 if quota_keys and not rollback_done:
@@ -606,12 +563,7 @@ async def _forward(request: Request, upstream_url: str,
     if upstream.status_code >= 500 and quota_keys:
         await rdb.eval(LUA_ROLLBACK, 3, *quota_keys)
 
-    content = upstream.content
-    # 将响应体里的 DashScope 模型名替换回原始 claude-* 名称
-    if restore_pattern and content:
-        content = restore_pattern.sub(restore_replacement, content)
-
     resp_headers = {k: v for k, v in upstream.headers.items() if k.lower() not in skip}
-    return Response(content=content,
+    return Response(content=upstream.content,
                     status_code=upstream.status_code,
                     headers=resp_headers)
