@@ -124,17 +124,10 @@ claude --model qwen3-coder-next
 ## 常用命令
 
 ```bash
-# docker-compose v2
 docker compose logs -f proxy
 docker compose restart proxy
 docker compose down
 docker compose build && docker compose up -d
-
-# docker-compose v1（旧版）
-docker-compose logs -f proxy
-docker-compose restart proxy
-docker-compose down
-docker-compose build && docker-compose up -d
 ```
 
 ## API 使用
