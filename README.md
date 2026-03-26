@@ -33,18 +33,16 @@ kimi-k2.5
 
 ### Anthropic 协议（Claude Code）
 
-与 OpenAI 协议共用同一套模型白名单（百炼两个端点支持的模型相同）：
+百炼 `/apps/anthropic` 端点仅支持 Qwen 系列模型，计入配额：
 
 ```
 qwen3.5-plus
 qwen3-max-2026-01-23
 qwen3-coder-next
 qwen3-coder-plus
-MiniMax-M2.5
-glm-5
-glm-4.7
-kimi-k2.5
 ```
+
+> glm-5、kimi-k2.5、MiniMax-M2.5 等第三方模型不支持 Anthropic 协议，请使用 OpenAI 协议工具（如 openclaw）调用。
 
 ## 部署步骤
 
