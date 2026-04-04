@@ -79,10 +79,13 @@ _reset_day: int = int(os.getenv("MONTHLY_RESET_DAY", "1"))
 # ─────────────────────────────────────────
 _TZ_CST = datetime.timezone(datetime.timedelta(hours=8))  # 北京时间 UTC+8
 
-def period_info(kid: str) -> dict:
-    """返回当前周期的 Redis key、TTL（EXPIREAT时间戳）、重置时刻（北京时间）"""
+def period_info(kid: str, reset_day: int | None = None) -> dict:
+    """返回当前周期的 Redis key、TTL（EXPIREAT时间戳）、重置时刻（北京时间）
+    reset_day 由调用方从 Redis 读取后传入，确保多 worker 一致。
+    """
     now = datetime.datetime.now(tz=_TZ_CST).replace(tzinfo=None)  # 强制北京时间
-    reset_day = _reset_day  # 月度重置日，全局缓存
+    if reset_day is None:
+        reset_day = _reset_day  # fallback 到启动时缓存值
 
     slot = now.hour // 5
     date_s = now.strftime("%Y%m%d")
@@ -206,6 +209,12 @@ async def shutdown():
         await _http_client.aclose()
 
 
+async def _get_reset_day() -> int:
+    """从 Redis 读取当前月度重置日，确保多 worker 一致。"""
+    stored = await rdb.get("config:monthly_reset_day")
+    return int(stored) if stored else _reset_day
+
+
 async def _rebuild_secret_map():
     """从所有 key:meta:k{i} 重建 secret→kid 映射表。仅在 Key secret 变更时调用。"""
     pipe = rdb.pipeline()
@@ -235,7 +244,7 @@ def _limits(meta: dict) -> dict:
 
 
 async def _usage(kid: str) -> dict:
-    pi = period_info(kid)
+    pi = period_info(kid, await _get_reset_day())
     vals = await rdb.mget(pi["5h"]["key"], pi["week"]["key"], pi["month"]["key"])
     return {
         "5h":    int(vals[0]) if vals[0] else 0,
@@ -293,7 +302,8 @@ async def admin_list_keys(request: Request):
         pipe.get(f"key:meta:k{i}")
     metas = [json.loads(r) for r in await pipe.execute() if r]
 
-    period_infos = [period_info(m["kid"]) for m in metas]
+    rd = await _get_reset_day()
+    period_infos = [period_info(m["kid"], rd) for m in metas]
     pipe = rdb.pipeline()
     for pi in period_infos:
         for dim in ("5h", "week", "month"):
@@ -380,7 +390,7 @@ async def admin_set_usage(kid: str, body: UsageUpdate, request: Request):
     _check_admin(request)
     meta = await _get_meta(kid)
     if not meta: raise HTTPException(404)
-    pi   = period_info(kid)
+    pi   = period_info(kid, await _get_reset_day())
     pipe = rdb.pipeline()
     if body.month     is not None:
         pipe.set(pi["month"]["key"], body.month)
@@ -400,16 +410,16 @@ async def admin_reset_usage(kid: str, request: Request):
     _check_admin(request)
     meta = await _get_meta(kid)
     if not meta: raise HTTPException(404)
-    pi = period_info(kid)
+    pi = period_info(kid, await _get_reset_day())
     await rdb.delete(pi["5h"]["key"], pi["week"]["key"], pi["month"]["key"])
     return {"kid": kid, "reset": True}
 
 
 @app.get("/_admin/config")
 async def admin_get_config(request: Request):
-    """获取系统配置"""
+    """获取系统配置（直接读 Redis，多 worker 一致）"""
     _check_admin(request)
-    return {"monthly_reset_day": _reset_day}
+    return {"monthly_reset_day": await _get_reset_day()}
 
 
 @app.put("/_admin/config/reset-day")
@@ -435,7 +445,7 @@ async def user_usage(request: Request):
     meta = await _get_meta(kid)
     lims = _limits(meta)
     used = await _usage(kid)
-    pi   = period_info(kid)
+    pi   = period_info(kid, await _get_reset_day())
     return {
         "label": meta["label"], "kid": kid, "secret": secret,
         "enabled": meta["enabled"],
@@ -453,7 +463,7 @@ async def user_usage(request: Request):
 async def _check_and_deduct_quota(kid: str, meta: dict) -> tuple:
     """原子检查并扣除三维配额，返回 (k5h, kw, km) 供回滚用。不足则抛 429。"""
     lims = _limits(meta)
-    pi   = period_info(kid)
+    pi   = period_info(kid, await _get_reset_day())
     k5h, kw, km = pi["5h"]["key"], pi["week"]["key"], pi["month"]["key"]
     e5h, ew, em = pi["5h"]["expire_at"], pi["week"]["expire_at"], pi["month"]["expire_at"]
 
