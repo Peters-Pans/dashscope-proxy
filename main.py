@@ -77,9 +77,11 @@ _reset_day: int = int(os.getenv("MONTHLY_RESET_DAY", "1"))
 # ─────────────────────────────────────────
 #  固定周期 Key 计算
 # ─────────────────────────────────────────
+_TZ_CST = datetime.timezone(datetime.timedelta(hours=8))  # 北京时间 UTC+8
+
 def period_info(kid: str) -> dict:
-    """返回当前周期的 Redis key、TTL（EXPIREAT时间戳）、重置时刻"""
-    now = datetime.datetime.now()
+    """返回当前周期的 Redis key、TTL（EXPIREAT时间戳）、重置时刻（北京时间）"""
+    now = datetime.datetime.now(tz=_TZ_CST).replace(tzinfo=None)  # 强制北京时间
     reset_day = _reset_day  # 月度重置日，全局缓存
 
     slot = now.hour // 5
