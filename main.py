@@ -162,6 +162,28 @@ if n5h == 1 then redis.call('EXPIREAT', k5h, e5h) end
 return 'OK'
 """
 
+LUA_MIGRATE_MONTH = """
+-- 修改重置日时迁移当前月度计数器
+-- KEYS[1]=旧key, KEYS[2]=新key, ARGV[1]=新过期时间戳
+local old_k = KEYS[1]; local new_k = KEYS[2]
+local new_expire = tonumber(ARGV[1])
+if old_k == new_k then
+    -- key 相同，只更新过期时间
+    if redis.call('EXISTS', old_k) == 1 then
+        redis.call('EXPIREAT', old_k, new_expire)
+    end
+else
+    -- key 不同，把旧值合并进新 key
+    local old_val = tonumber(redis.call('GET', old_k)) or 0
+    if old_val > 0 then
+        redis.call('INCRBY', new_k, old_val)
+        redis.call('EXPIREAT', new_k, new_expire)
+        redis.call('DEL', old_k)
+    end
+end
+return 'OK'
+"""
+
 LUA_ROLLBACK = """
 local function decr_safe(k)
     local v = tonumber(redis.call('GET', k)) or 0
@@ -424,12 +446,25 @@ async def admin_get_config(request: Request):
 
 @app.put("/_admin/config/reset-day")
 async def admin_set_reset_day(body: ResetDayUpdate, request: Request):
-    """修改月度重置日（立即生效，持久化到 Redis）"""
+    """修改月度重置日：迁移当前月计数器后生效，已用量不丢失。"""
     global _reset_day
     _check_admin(request)
-    await rdb.set("config:monthly_reset_day", body.day)
-    _reset_day = body.day
-    return {"monthly_reset_day": _reset_day}
+    old_day = await _get_reset_day()
+    new_day = body.day
+    if old_day != new_day:
+        # 将所有子 Key 的当前月计数器迁移到新周期 key，并更新过期时间
+        for i in range(1, 5):
+            kid = f"k{i}"
+            old_pi = period_info(kid, old_day)
+            new_pi = period_info(kid, new_day)
+            await rdb.eval(
+                LUA_MIGRATE_MONTH, 2,
+                old_pi["month"]["key"], new_pi["month"]["key"],
+                new_pi["month"]["expire_at"],
+            )
+    await rdb.set("config:monthly_reset_day", new_day)
+    _reset_day = new_day
+    return {"monthly_reset_day": new_day}
 
 
 # ─────────────────────────────────────────

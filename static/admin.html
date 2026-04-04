@@ -214,7 +214,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
   <div class="md">
     <h3>修改配额限制</h3>
     <div class="sub" id="m-limits-sub">留空表示使用全局默认值</div>
-    <div class="fg"><label>月限额（自然月）</label><input type="number" id="i-month" placeholder="默认 22,500"><div class="hint">全局默认 22,500 次 / 月</div></div>
+    <div class="fg"><label>月限额（账单周期）</label><input type="number" id="i-month" placeholder="默认 22,500"><div class="hint">全局默认 22,500 次 / 账单周期</div></div>
     <div class="fg"><label>周限额（自然周）</label><input type="number" id="i-week" placeholder="默认 11,250"><div class="hint">全局默认 11,250 次 / 周</div></div>
     <div class="fg"><label>5小时限额（固定5小时块）</label><input type="number" id="i-5h" placeholder="默认 1,500"><div class="hint">全局默认 1,500 次 / 5小时</div></div>
     <div class="mf">
@@ -229,7 +229,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
   <div class="md">
     <h3>手动修改用量</h3>
     <div class="sub" id="m-usage-sub">直接写入当前周期的已用请求数</div>
-    <div class="fg"><label>月用量（当前自然月）</label><input type="number" id="u-month" placeholder="0" min="0"><div class="hint" id="u-month-hint"></div></div>
+    <div class="fg"><label>月用量（当前账单周期）</label><input type="number" id="u-month" placeholder="0" min="0"><div class="hint" id="u-month-hint"></div></div>
     <div class="fg"><label>周用量（当前自然周）</label><input type="number" id="u-week" placeholder="0" min="0"><div class="hint" id="u-week-hint"></div></div>
     <div class="fg"><label>5小时用量（当前块）</label><input type="number" id="u-5h" placeholder="0" min="0"><div class="hint" id="u-5h-hint"></div></div>
     <div class="mf">
