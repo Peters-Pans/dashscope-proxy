@@ -170,6 +170,15 @@ pre{padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;
 .tip b{font-weight:600}
 
 @media(max-width:520px){.model-grid{grid-template-columns:1fr}}
+
+/* ── 记住登录 ── */
+.rem-row{display:flex;align-items:center;gap:8px;margin-bottom:16px;color:var(--t2);font-size:13px;cursor:pointer;user-select:none}
+.rem-row input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+
+/* ── 退出 ── */
+.logout-btn{background:none;border:none;color:var(--t3);font-size:12px;cursor:pointer;padding:4px 8px;
+  border-radius:6px;transition:color .2s}
+.logout-btn:hover{color:var(--crit)}
 </style>
 </head>
 <body>
@@ -186,6 +195,7 @@ pre{padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;
       <span class="iico">🔑</span>
       <input type="text" id="ki" placeholder="sk-sub-xxxxxxxxxx" autocomplete="off">
     </div>
+    <label class="rem-row"><input type="checkbox" id="remember" checked>记住 Key（关闭浏览器后保留）</label>
     <button class="btn-q" onclick="doQ()">查询用量</button>
     <div class="ierr" id="ierr">Key 无效或已失效，请联系管理员</div>
   </div>
@@ -201,7 +211,10 @@ pre{padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;
           <div class="umeta" id="umeta">—</div>
         </div>
       </div>
-      <div class="ustatus"><div class="dot"></div><span style="color:var(--ok)">运行中</span></div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="ustatus"><div class="dot"></div><span style="color:var(--ok)">运行中</span></div>
+        <button class="logout-btn" onclick="logout()">退出</button>
+      </div>
     </div>
 
     <div class="ab" id="ab"><span id="ai"></span><span id="am"></span></div>
@@ -476,17 +489,45 @@ API Key:   <span class="hl-key" id="oi-key">sk-sub-xxxxxxxxxx</span></pre>
 <script>
 let myKey='', D=null, BASE_URL=location.origin;
 
+// ── 自动登录 ──
+window.addEventListener('DOMContentLoaded', ()=>{
+  const saved = localStorage.getItem('dash_user_key') || sessionStorage.getItem('dash_user_key');
+  if(saved){ document.getElementById('ki').value=saved; _autoQuery(saved); }
+});
+async function _autoQuery(k){
+  const r=await fetch('/_usage',{headers:{'Authorization':'Bearer '+k}});
+  if(r.ok){
+    myKey=k; D=await r.json();
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='block';
+    fillTutorial(); render();
+  } else {
+    localStorage.removeItem('dash_user_key');
+    sessionStorage.removeItem('dash_user_key');
+  }
+}
+
 async function doQ(){
   const k=document.getElementById('ki').value.trim(); if(!k)return;
   const r=await fetch('/_usage',{headers:{'Authorization':'Bearer '+k}});
-  if(r.ok){myKey=k;D=await r.json();
+  if(r.ok){
+    myKey=k; D=await r.json();
+    if(document.getElementById('remember').checked) localStorage.setItem('dash_user_key',k);
+    else sessionStorage.setItem('dash_user_key',k);
     document.getElementById('login-screen').style.display='none';
     document.getElementById('app').style.display='block';
-    fillTutorial();
-    render();
+    fillTutorial(); render();
   } else document.getElementById('ierr').style.display='block';
 }
 document.getElementById('ki').addEventListener('keydown',e=>e.key==='Enter'&&doQ());
+function logout(){
+  myKey=''; D=null;
+  localStorage.removeItem('dash_user_key');
+  sessionStorage.removeItem('dash_user_key');
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('ki').value='';
+}
 
 async function loadU(){
   const b=document.getElementById('rbtn'); b.classList.add('spin');

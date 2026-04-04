@@ -108,6 +108,24 @@ if [ "$MODE" = "install" ]; then
     fi
   done
 
+  # 月度配额重置日
+  echo ""
+  echo -e "  ${BOLD}月度配额重置日${NC}"
+  echo -e "  ${CYAN}每月几号 00:00 重置月度配额（直接回车默认第1日）${NC}"
+  echo ""
+  while true; do
+    read -p "  重置日 [1-28，默认 1]: " _rd_input
+    if [ -z "$_rd_input" ]; then
+      MONTHLY_RESET_DAY=1; break
+    elif [[ "$_rd_input" =~ ^[0-9]+$ ]] && [ "$_rd_input" -ge 1 ] && [ "$_rd_input" -le 28 ]; then
+      MONTHLY_RESET_DAY=$_rd_input; break
+    else
+      warn "请输入 1-28 之间的数字"
+    fi
+  done
+  success "月度重置日设为每月第 ${MONTHLY_RESET_DAY} 日"
+  echo ""
+
   # 生成随机凭据
   ADMIN_TOKEN=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 40)
   REDIS_PASS=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)
@@ -127,6 +145,9 @@ REDIS_PASSWORD=${REDIS_PASS}
 
 # ── 管理员 Token ──────────────────────────────────────
 ADMIN_TOKEN=${ADMIN_TOKEN}
+
+# ── 月度配额重置日（1-28，可在管理后台在线修改）──────────
+MONTHLY_RESET_DAY=${MONTHLY_RESET_DAY}
 
 # ── 子 Key（分发给用户）────────────────────────────────
 KEY_1=${KEY_1}

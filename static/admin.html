@@ -148,6 +148,20 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
   pointer-events:none;z-index:300}
 
 .divider{height:1px;background:var(--border);margin:16px 0}
+
+/* ── 记住登录 ── */
+.rem-row{display:flex;align-items:center;gap:8px;margin-bottom:16px;color:var(--text2);font-size:13px;cursor:pointer;user-select:none}
+.rem-row input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+
+/* ── 配置栏 ── */
+.cfg-bar{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px 22px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between}
+.cfg-info{display:flex;align-items:center;gap:12px}
+.cfg-label{font-size:12px;color:var(--text2);font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+.cfg-val{font-size:14px;font-weight:700;color:var(--accent2)}
+.cfg-edit{padding:6px 14px;border-radius:7px;background:var(--surface2);border:1px solid var(--border);
+  color:var(--text2);cursor:pointer;font-size:12px;transition:all .2s}
+.cfg-edit:hover{border-color:var(--accent);color:var(--accent)}
 </style>
 </head>
 <body>
@@ -158,6 +172,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     <h1>管理后台</h1>
     <p>DashScope 代理 · 配额管理</p>
     <input type="password" id="tok" placeholder="Admin Token" autocomplete="off">
+    <label class="rem-row"><input type="checkbox" id="remember" checked>记住登录状态（关闭浏览器后保留）</label>
     <button class="btn-login" onclick="doLogin()">进入后台</button>
     <div class="lerr" id="lerr">Token 错误，请重试</div>
   </div>
@@ -182,6 +197,13 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
       <div class="ovc"><div class="ov-label">月请求总量</div><div class="ov-val" id="ov-m">—</div><div class="ov-sub">/ 90,000 次</div></div>
       <div class="ovc"><div class="ov-label">本周请求总量</div><div class="ov-val" id="ov-w">—</div><div class="ov-sub">/ 45,000 次</div></div>
       <div class="ovc"><div class="ov-label">近5小时总量</div><div class="ov-val" id="ov-5">—</div><div class="ov-sub">/ 6,000 次</div></div>
+    </div>
+    <div class="cfg-bar">
+      <div class="cfg-info">
+        <span class="cfg-label">月度配额重置日</span>
+        <span class="cfg-val" id="cfg-reset-day">每月 — 日</span>
+      </div>
+      <button class="cfg-edit" onclick="openResetDay()">修改</button>
     </div>
     <div class="kg" id="kg"><div style="padding:40px;color:var(--text3);text-align:center">加载中…</div></div>
   </div>
@@ -231,6 +253,23 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
   </div>
 </div>
 
+<!-- 重置日弹窗 -->
+<div class="mo" id="m-reset-day">
+  <div class="md">
+    <h3>修改月度重置日</h3>
+    <div class="sub">每月几号 00:00 重置月度配额（1-28）</div>
+    <div class="fg">
+      <label>重置日</label>
+      <input type="number" id="i-reset-day" min="1" max="28" placeholder="1">
+      <div class="hint">建议 1-28，避免月末天数不一致</div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="closeM('m-reset-day')">取消</button>
+      <button class="btn btn-p" onclick="saveResetDay()">保存</button>
+    </div>
+  </div>
+</div>
+
 <!-- 确认弹窗 -->
 <div class="mo" id="m-confirm">
   <div class="md">
@@ -248,19 +287,53 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 <script>
 let tok='', data=[], ek=null;
 
+// ── 自动登录 ──
+window.addEventListener('DOMContentLoaded', ()=>{
+  const saved = localStorage.getItem('dash_admin_tok') || sessionStorage.getItem('dash_admin_tok');
+  if(saved) _autoLogin(saved);
+});
+async function _autoLogin(t){
+  const r=await fetch('/_admin/keys',{headers:{'X-Admin-Token':t}});
+  if(r.ok){
+    tok=t;
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='block';
+    await loadData();
+  } else {
+    localStorage.removeItem('dash_admin_tok');
+    sessionStorage.removeItem('dash_admin_tok');
+  }
+}
+
 async function doLogin(){
   const t=document.getElementById('tok').value.trim(); if(!t)return;
   const r=await fetch('/_admin/keys',{headers:{'X-Admin-Token':t}});
-  if(r.ok){tok=t;document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='block';await loadData();}
-  else document.getElementById('lerr').style.display='block';
+  if(r.ok){
+    tok=t;
+    if(document.getElementById('remember').checked) localStorage.setItem('dash_admin_tok',t);
+    else sessionStorage.setItem('dash_admin_tok',t);
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='block';
+    await loadData();
+  } else document.getElementById('lerr').style.display='block';
 }
 document.getElementById('tok').addEventListener('keydown',e=>e.key==='Enter'&&doLogin());
-function logout(){tok='';document.getElementById('app').style.display='none';document.getElementById('login-screen').style.display='flex';}
+function logout(){
+  tok='';
+  localStorage.removeItem('dash_admin_tok');
+  sessionStorage.removeItem('dash_admin_tok');
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+}
 
 async function loadData(){
-  const r=await fetch('/_admin/keys',{headers:{'X-Admin-Token':tok}});
-  if(!r.ok){showT('加载失败','e');return;}
-  data=await r.json(); renderOv(); renderKeys();
+  const [r1,r2]=await Promise.all([
+    fetch('/_admin/keys',{headers:{'X-Admin-Token':tok}}),
+    fetch('/_admin/config',{headers:{'X-Admin-Token':tok}}),
+  ]);
+  if(!r1.ok){showT('加载失败','e');return;}
+  data=await r1.json(); renderOv(); renderKeys();
+  if(r2.ok){const cfg=await r2.json();document.getElementById('cfg-reset-day').textContent=`每月第 ${cfg.monthly_reset_day} 日`;}
   document.getElementById('ts').textContent='最后更新 '+new Date().toLocaleTimeString('zh-CN');
 }
 
@@ -423,6 +496,20 @@ async function copyS(kid){
   await navigator.clipboard.writeText(secret);
   const b=document.getElementById(`cp-${kid}`);b.textContent='已复制';b.classList.add('ok');
   setTimeout(()=>{b.textContent='复制';b.classList.remove('ok');},2000);
+}
+
+// ── 重置日 ──
+function openResetDay(){
+  const cur=document.getElementById('cfg-reset-day').textContent.match(/\d+/);
+  document.getElementById('i-reset-day').value=cur?cur[0]:'1';
+  openM('m-reset-day');
+}
+async function saveResetDay(){
+  const v=parseInt(document.getElementById('i-reset-day').value);
+  if(!v||v<1||v>28){showT('请输入 1-28 的数字','e');return;}
+  const r=await fetch('/_admin/config/reset-day',{method:'PUT',headers:{'X-Admin-Token':tok,'Content-Type':'application/json'},body:JSON.stringify({day:v})});
+  if(r.ok){closeM('m-reset-day');document.getElementById('cfg-reset-day').textContent=`每月第 ${v} 日`;showT('重置日已更新','s');}
+  else showT('保存失败','e');
 }
 
 // ── 弹窗 / Toast ──
