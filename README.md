@@ -4,6 +4,12 @@
 
 同时兼容 **OpenAI 协议**（openclaw 等工具）和 **Anthropic 协议**（Claude Code），共用同一套子 Key 和配额体系。
 
+## 界面预览
+
+| 管理后台 | 用户面板 |
+|---------|---------|
+| ![管理后台](docs/dashboard.png) | ![用户面板](docs/user-detail.png) |
+
 ## 功能特性
 
 - **双协议支持**：OpenAI 协议 + Anthropic 协议，自动识别，无需额外配置
@@ -250,4 +256,5 @@ curl https://your-domain.com/_admin/keys/k1/secret \
 ## License
 
 MIT
+
 
